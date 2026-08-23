@@ -4,25 +4,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { TeamStackParams } from '../navigation/types';
 import { colors, font, space } from '../theme';
-import { StatusBadge, BadgeStatus } from '../components/ui';
+import { StatusBadge, ProgressBar } from '../components/ui';
+import { ChevronRight } from '../components/icons';
 import { useStore } from '../store';
+import { memberActivationsFor, activationProgress } from '../data/teamData';
 
 type Props = NativeStackScreenProps<TeamStackParams, 'TeamMemberView'>;
-
-const memberWork: Record<string, { title: string; subtitle: string; status: BadgeStatus }[]> = {
-  m1: [
-    { title: 'Rove Skincare', subtitle: 'Product Launch · Malibu', status: 'Live' },
-    { title: 'Northline Apparel', subtitle: 'Launch Event', status: 'Completed' },
-  ],
-  m2: [{ title: 'Alta Coffee', subtitle: 'Brand Activation · Coachella', status: 'Live' }],
-  m3: [{ title: 'Ledger Sunglasses', subtitle: 'Summer Pop-Up · Venice Beach', status: 'Completed' }],
-};
 
 export function TeamMemberViewScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { team } = useStore();
   const member = team.find((m) => m.id === route.params.memberId);
-  const work = memberWork[route.params.memberId] ?? [];
+  const name = member?.name ?? 'Member';
+  const work = memberActivationsFor(route.params.memberId);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.white, paddingTop: insets.top }}>
@@ -31,24 +25,36 @@ export function TeamMemberViewScreen({ navigation, route }: Props) {
           <Pressable onPress={() => navigation.goBack()}>
             <Text style={styles.back}>← BACK TO ROSTER</Text>
           </Pressable>
-          <Text style={styles.title}>{member?.name ?? 'Member'}'s Activations</Text>
-          <Text style={styles.note}>Viewing as team admin · can edit tasks & fees, cannot capture content</Text>
+          <Text style={styles.title}>{name}'s Activations</Text>
+          <Text style={styles.note}>Viewing as team admin · tap an activation to see uploads & progress</Text>
         </View>
 
         <View style={{ paddingHorizontal: space.screenX, paddingTop: 12, gap: 12 }}>
-          {work.map((w, i) => (
-            <View key={i} style={styles.card}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Text style={styles.cardTitle}>{w.title}</Text>
-                <StatusBadge status={w.status} />
-              </View>
-              <Text style={styles.cardSub}>{w.subtitle}</Text>
-              <View style={{ flexDirection: 'row', gap: 14 }}>
-                <Pressable><Text style={styles.action}>EDIT FEE</Text></Pressable>
-                <Pressable><Text style={styles.action}>EDIT TASKS</Text></Pressable>
-              </View>
-            </View>
-          ))}
+          {work.map((a) => {
+            const progress = activationProgress(a);
+            const approved = a.items.filter((i) => i.state === 'approved').length;
+            return (
+              <Pressable
+                key={a.id}
+                onPress={() => navigation.navigate('TeamActivationDetail', { activationId: a.id, memberName: name })}
+                style={({ pressed }) => [styles.card, pressed && { backgroundColor: colors.grey50 }]}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={styles.cardTitle}>{a.title}</Text>
+                  <StatusBadge status={a.status} />
+                </View>
+                <Text style={styles.cardSub}>{a.subtitle}</Text>
+                <ProgressBar value={progress} />
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={styles.progressMeta}>{approved}/{a.items.length} approved · {progress}%</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                    <Text style={styles.view}>View uploads</Text>
+                    <ChevronRight size={16} color={colors.grey400} />
+                  </View>
+                </View>
+              </Pressable>
+            );
+          })}
         </View>
       </ScrollView>
     </View>
@@ -59,8 +65,9 @@ const styles = StyleSheet.create({
   back: { fontFamily: font.mono, fontSize: 10, color: colors.grey600, marginBottom: 6 },
   title: { fontFamily: font.bold, fontSize: 20, color: colors.black },
   note: { fontFamily: font.regular, fontSize: 12, color: colors.grey600, marginTop: 4 },
-  card: { borderWidth: 1, borderColor: colors.grey100, borderRadius: 12, padding: 16, gap: 8 },
+  card: { borderWidth: 1, borderColor: colors.grey100, borderRadius: 12, padding: 16, gap: 10 },
   cardTitle: { fontFamily: font.semibold, fontSize: 15, color: colors.black },
   cardSub: { fontFamily: font.regular, fontSize: 12, color: colors.grey600 },
-  action: { fontFamily: font.monoMedium, fontSize: 10, color: colors.black, letterSpacing: 0.2 },
+  progressMeta: { fontFamily: font.mono, fontSize: 11, color: colors.grey600 },
+  view: { fontFamily: font.mono, fontSize: 11, color: colors.grey600, letterSpacing: 0.2 },
 });

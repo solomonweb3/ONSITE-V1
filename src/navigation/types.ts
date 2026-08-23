@@ -24,6 +24,7 @@ export type ProfileStackParams = {
 export type TeamStackParams = {
   TeamHome: undefined;
   TeamMemberView: { memberId: string };
+  TeamActivationDetail: { activationId: string; memberName: string };
   TeamSettings: undefined;
 };
 
