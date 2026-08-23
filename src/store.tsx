@@ -2,6 +2,7 @@ import React, { createContext, useContext, useMemo, useState, useCallback, useEf
 import type { Session } from '@supabase/supabase-js';
 import { BadgeStatus } from './components/ui';
 import { supabase } from './lib/supabase';
+import * as api from './data/api';
 
 export type AuthResult = { error?: string; needsConfirm?: boolean };
 
@@ -59,49 +60,6 @@ export type User = {
 };
 
 /* --------------------------------- Seed ----------------------------------- */
-
-const seedActivations: Activation[] = [
-  {
-    id: 'a1',
-    title: 'Ledger Sunglasses',
-    subtitle: 'Summer Pop-Up · Venice Beach',
-    status: 'Live',
-    items: [
-      { id: 'i1', title: '1x Instagram Reel', owner: 'client', due: '6:00 PM', state: 'approved', caption: 'Golden hour try-on at the pop-up.', photoLabel: 'REEL_0612.mp4' },
-      { id: 'i2', title: '2x TikTok Posts', owner: 'client', due: '8:00 PM', state: 'submitted', caption: 'Two-part unboxing + street style.', photoLabel: 'TIKTOK_02.mov' },
-      { id: 'i3', title: '1x Instagram Story Set', owner: 'my', due: '9:00 PM', state: 'todo' },
-      { id: 'i4', title: '1x Product Flatlay', owner: 'client', due: '5:00 PM', state: 'approved', caption: 'Flatlay on the boardwalk.', photoLabel: 'FLATLAY_11.jpg' },
-      { id: 'i5', title: '1x Behind-the-scenes clip', owner: 'client', due: '7:30 PM', state: 'todo' },
-    ],
-  },
-  {
-    id: 'a2',
-    title: 'Alta Coffee',
-    subtitle: 'Brand Activation · Coachella',
-    status: 'Live',
-    items: [
-      { id: 'i6', title: '1x Instagram Reel', owner: 'client', due: '2:00 PM', state: 'submitted', caption: 'Cold brew in the desert.', photoLabel: 'ALTA_REEL.mp4' },
-      { id: 'i7', title: '3x Story Frames', owner: 'client', due: '4:00 PM', state: 'todo' },
-      { id: 'i8', title: '1x Feed Post', owner: 'my', due: '6:00 PM', state: 'todo' },
-    ],
-  },
-  {
-    id: 'a3',
-    title: 'Northline Apparel',
-    subtitle: 'Launch Event',
-    status: 'Completed',
-    items: [
-      { id: 'i9', title: '1x Launch Recap Reel', owner: 'client', due: 'Delivered', state: 'approved', caption: 'Recap of the launch night.', photoLabel: 'RECAP.mp4' },
-      { id: 'i10', title: '2x Feed Posts', owner: 'client', due: 'Delivered', state: 'approved', caption: 'Fit checks from the floor.', photoLabel: 'FIT_02.jpg' },
-    ],
-  },
-];
-
-const seedNotifications: AppNotification[] = [
-  { id: 'n1', title: 'Activation approved', body: 'Ledger Sunglasses approved all your content', time: '2h ago', unread: true },
-  { id: 'n2', title: 'Item due soon', body: '1x TikTok Post due in 15 min', time: '3h ago', unread: true },
-  { id: 'n3', title: 'Activation created', body: 'Alta Coffee activation is live', time: '1d ago', unread: false },
-];
 
 const seedTeam: TeamMember[] = [
   { id: 'm1', name: 'Ariana Ford', initials: 'AF', liveActivations: 3 },
@@ -166,8 +124,8 @@ const Ctx = createContext<Store | null>(null);
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User>(seedUser);
-  const [activations, setActivations] = useState<Activation[]>(seedActivations);
-  const [notifications, setNotifications] = useState<AppNotification[]>(seedNotifications);
+  const [activations, setActivations] = useState<Activation[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [team] = useState<TeamMember[]>(seedTeam);
   const [pending, setPending] = useState<PendingRequest[]>(seedPending);
   const [session, setSession] = useState<Session | null>(null);
@@ -184,30 +142,45 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  // When a session exists, hydrate the profile row (name/handle/role) and
-  // persist the account kind chosen on the AccountKind screen.
+  // When a session exists: hydrate the profile, then load (or seed) the
+  // user's activations + notifications from Supabase. On sign-out, clear.
   useEffect(() => {
-    if (!session) return;
+    if (!session) {
+      setActivations([]);
+      setNotifications([]);
+      return;
+    }
+    let cancelled = false;
     (async () => {
       const uid = session.user.id;
-      await supabase.from('profiles').update({ role: roleRef.current }).eq('id', uid);
-      const { data } = await supabase.from('profiles').select('name, handle, phone, role, profile_complete').eq('id', uid).single();
-      if (data) {
-        setUser((u) => ({
-          ...u,
-          name: data.name || u.name,
-          handle: data.handle || u.handle,
-          phone: data.phone || u.phone,
-          role: (data.role as 'creator' | 'team') || roleRef.current,
-          profileComplete: data.profile_complete ?? u.profileComplete,
-        }));
-      } else {
-        setUser((u) => ({ ...u, role: roleRef.current }));
+      try {
+        const profile = await api.hydrateProfile(uid, roleRef.current, session.user.email);
+        if (!cancelled && profile) {
+          setUser((u) => ({
+            ...u,
+            name: profile.name || u.name,
+            handle: profile.handle || u.handle,
+            phone: profile.phone || u.phone,
+            role: (profile.role as 'creator' | 'team') || roleRef.current,
+            profileComplete: profile.profile_complete ?? u.profileComplete,
+          }));
+        }
+        const { activations: acts, notifications: notifs } = await api.bootstrapUserData(uid);
+        if (!cancelled) {
+          setActivations(acts);
+          setNotifications(notifs);
+        }
+      } catch (e) {
+        console.warn('[store] data load failed', e);
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [session]);
 
   const authed = !!session;
+  const uid = session?.user.id;
 
   const progressOf = useCallback(
     (id: string) => {
@@ -274,27 +247,35 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setUser((u) => ({ ...u, profileComplete: true }));
         if (session) supabase.from('profiles').update({ profile_complete: true }).eq('id', session.user.id).then(() => {});
       },
-      submitItem: (activationId, itemId, caption, photoLabel) =>
-        updateItem(activationId, itemId, { state: 'submitted', caption, photoLabel, rejectReason: undefined }),
-      approveItem: (activationId, itemId) => updateItem(activationId, itemId, { state: 'approved' }),
-      rejectItem: (activationId, itemId, reason) => updateItem(activationId, itemId, { state: 'rejected', rejectReason: reason }),
-      toggleMyItem: (activationId, itemId) =>
+      submitItem: (activationId, itemId, caption, photoLabel) => {
+        updateItem(activationId, itemId, { state: 'submitted', caption, photoLabel, rejectReason: undefined });
+        api.submitItemRemote(itemId, caption, photoLabel).catch((e) => console.warn('[store] submit failed', e));
+      },
+      approveItem: (activationId, itemId) => {
+        updateItem(activationId, itemId, { state: 'approved' });
+        api.setItemStateRemote(itemId, 'approved').catch((e) => console.warn('[store] approve failed', e));
+      },
+      rejectItem: (activationId, itemId, reason) => {
+        updateItem(activationId, itemId, { state: 'rejected', rejectReason: reason });
+        api.setItemStateRemote(itemId, 'rejected', reason).catch((e) => console.warn('[store] reject failed', e));
+      },
+      toggleMyItem: (activationId, itemId) => {
+        const current = activations.find((a) => a.id === activationId)?.items.find((i) => i.id === itemId);
+        const next: ChecklistItem['state'] = current?.state === 'approved' ? 'todo' : 'approved';
         setActivations((prev) =>
           prev.map((a) =>
-            a.id !== activationId
-              ? a
-              : {
-                  ...a,
-                  items: a.items.map((i) =>
-                    i.id === itemId ? { ...i, state: i.state === 'approved' ? 'todo' : 'approved' } : i,
-                  ),
-                },
+            a.id !== activationId ? a : { ...a, items: a.items.map((i) => (i.id === itemId ? { ...i, state: next } : i)) },
           ),
-        ),
-      markAllRead: () => setNotifications((prev) => prev.map((n) => ({ ...n, unread: false }))),
+        );
+        api.setItemStateRemote(itemId, next).catch((e) => console.warn('[store] toggle failed', e));
+      },
+      markAllRead: () => {
+        setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
+        if (uid) api.markAllReadRemote(uid).catch((e) => console.warn('[store] markRead failed', e));
+      },
       resolveRequest: (id) => setPending((prev) => prev.filter((p) => p.id !== id)),
     }),
-    [user, activations, notifications, team, pending, authed, authLoading, session, progressOf, updateItem],
+    [user, activations, notifications, team, pending, authed, authLoading, session, uid, progressOf, updateItem],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
