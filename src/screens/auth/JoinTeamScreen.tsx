@@ -1,17 +1,16 @@
 import React, { useState } from 'react';
-import { View, TextInput, StyleSheet } from 'react-native';
+import { View, Text, TextInput, StyleSheet } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AuthStackParams } from '../../navigation/types';
 import { Screen, Header } from '../../components/Screen';
 import { ScreenTitle, Subtitle, Button } from '../../components/ui';
 import { colors, font } from '../../theme';
-import { useStore } from '../../store';
 
 type Props = NativeStackScreenProps<AuthStackParams, 'JoinTeam'>;
 
 export function JoinTeamScreen({ navigation }: Props) {
-  const { signIn } = useStore();
   const [code, setCode] = useState('');
+  const [notice, setNotice] = useState<string | null>(null);
 
   return (
     <Screen>
@@ -29,7 +28,20 @@ export function JoinTeamScreen({ navigation }: Props) {
         style={styles.codeBox}
       />
       <View style={{ height: 16 }} />
-      <Button label="Request to Join" onPress={() => signIn('team')} />
+      <Button
+        label="Request to Join"
+        disabled={code.trim().length < 4}
+        onPress={() => setNotice('Request sent. Create your account to finish joining once your admin approves.')}
+      />
+      {notice ? (
+        <Text style={{ fontFamily: font.regular, fontSize: 13, color: colors.success, marginTop: 14 }}>{notice}</Text>
+      ) : null}
+      <Text
+        onPress={() => navigation.navigate('TeamAuth')}
+        style={{ fontFamily: font.regular, fontSize: 13, color: colors.grey600, marginTop: 12 }}
+      >
+        Set up your account →
+      </Text>
     </Screen>
   );
 }

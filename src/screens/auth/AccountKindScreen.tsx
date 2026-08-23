@@ -4,10 +4,12 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AuthStackParams } from '../../navigation/types';
 import { Screen, Header } from '../../components/Screen';
 import { ScreenTitle, Subtitle, SelectCard } from '../../components/ui';
+import { useStore } from '../../store';
 
 type Props = NativeStackScreenProps<AuthStackParams, 'AccountKind'>;
 
 export function AccountKindScreen({ navigation }: Props) {
+  const { setRole } = useStore();
   return (
     <Screen>
       <Header onBack={() => navigation.goBack()} />
@@ -19,12 +21,18 @@ export function AccountKindScreen({ navigation }: Props) {
         <SelectCard
           title="I'm an individual creator"
           subtitle="Log in with your phone number"
-          onPress={() => navigation.navigate('Login')}
+          onPress={() => {
+            setRole('creator');
+            navigation.navigate('Login');
+          }}
         />
         <SelectCard
           title="I'm logging into a team"
           subtitle="Team owners use email + password"
-          onPress={() => navigation.navigate('TeamAuth')}
+          onPress={() => {
+            setRole('team');
+            navigation.navigate('TeamAuth');
+          }}
         />
       </View>
     </Screen>

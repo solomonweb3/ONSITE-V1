@@ -1,5 +1,9 @@
-import React, { createContext, useContext, useMemo, useState, useCallback } from 'react';
+import React, { createContext, useContext, useMemo, useState, useCallback, useEffect } from 'react';
+import type { Session } from '@supabase/supabase-js';
 import { BadgeStatus } from './components/ui';
+import { supabase } from './lib/supabase';
+
+export type AuthResult = { error?: string; needsConfirm?: boolean };
 
 /* --------------------------------- Types ---------------------------------- */
 
@@ -134,15 +138,21 @@ type Store = {
   pending: PendingRequest[];
   teamName: string;
   authed: boolean;
+  authLoading: boolean;
   // derived
   liveCount: number;
   completedCount: number;
   unreadCount: number;
   progressOf: (id: string) => number;
   activation: (id: string) => Activation | undefined;
+  // auth
+  setRole: (role: 'creator' | 'team') => void;
+  signUpWithEmail: (email: string, password: string) => Promise<AuthResult>;
+  signInWithEmail: (email: string, password: string) => Promise<AuthResult>;
+  sendPhoneCode: (phone: string) => Promise<AuthResult>;
+  verifyPhoneCode: (phone: string, token: string) => Promise<AuthResult>;
+  signOut: () => Promise<void>;
   // actions
-  signIn: (role: 'creator' | 'team') => void;
-  signOut: () => void;
   completeProfile: () => void;
   submitItem: (activationId: string, itemId: string, caption: string, photoLabel: string) => void;
   approveItem: (activationId: string, itemId: string) => void;
@@ -160,7 +170,44 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotification[]>(seedNotifications);
   const [team] = useState<TeamMember[]>(seedTeam);
   const [pending, setPending] = useState<PendingRequest[]>(seedPending);
-  const [authed, setAuthed] = useState(false);
+  const [session, setSession] = useState<Session | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const roleRef = React.useRef<'creator' | 'team'>('creator');
+
+  // Track the real Supabase auth session.
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setAuthLoading(false);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  // When a session exists, hydrate the profile row (name/handle/role) and
+  // persist the account kind chosen on the AccountKind screen.
+  useEffect(() => {
+    if (!session) return;
+    (async () => {
+      const uid = session.user.id;
+      await supabase.from('profiles').update({ role: roleRef.current }).eq('id', uid);
+      const { data } = await supabase.from('profiles').select('name, handle, phone, role, profile_complete').eq('id', uid).single();
+      if (data) {
+        setUser((u) => ({
+          ...u,
+          name: data.name || u.name,
+          handle: data.handle || u.handle,
+          phone: data.phone || u.phone,
+          role: (data.role as 'creator' | 'team') || roleRef.current,
+          profileComplete: data.profile_complete ?? u.profileComplete,
+        }));
+      } else {
+        setUser((u) => ({ ...u, role: roleRef.current }));
+      }
+    })();
+  }, [session]);
+
+  const authed = !!session;
 
   const progressOf = useCallback(
     (id: string) => {
@@ -192,17 +239,41 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       pending,
       teamName: TEAM_NAME,
       authed,
+      authLoading,
       liveCount: activations.filter((a) => a.status === 'Live').length,
       completedCount: activations.filter((a) => a.status === 'Completed' || a.status === 'Paid').length,
       unreadCount: notifications.filter((n) => n.unread).length,
       progressOf,
       activation: (id: string) => activations.find((a) => a.id === id),
-      signIn: (role) => {
+      setRole: (role) => {
+        roleRef.current = role;
         setUser((u) => ({ ...u, role }));
-        setAuthed(true);
       },
-      signOut: () => setAuthed(false),
-      completeProfile: () => setUser((u) => ({ ...u, profileComplete: true })),
+      signUpWithEmail: async (email, password) => {
+        const { data, error } = await supabase.auth.signUp({ email: email.trim(), password });
+        if (error) return { error: error.message };
+        // If email confirmation is on, there's no session until they confirm.
+        return { needsConfirm: !data.session };
+      },
+      signInWithEmail: async (email, password) => {
+        const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+        return error ? { error: error.message } : {};
+      },
+      sendPhoneCode: async (phone) => {
+        const { error } = await supabase.auth.signInWithOtp({ phone: phone.trim() });
+        return error ? { error: error.message } : {};
+      },
+      verifyPhoneCode: async (phone, token) => {
+        const { error } = await supabase.auth.verifyOtp({ phone: phone.trim(), token: token.trim(), type: 'sms' });
+        return error ? { error: error.message } : {};
+      },
+      signOut: async () => {
+        await supabase.auth.signOut();
+      },
+      completeProfile: () => {
+        setUser((u) => ({ ...u, profileComplete: true }));
+        if (session) supabase.from('profiles').update({ profile_complete: true }).eq('id', session.user.id).then(() => {});
+      },
       submitItem: (activationId, itemId, caption, photoLabel) =>
         updateItem(activationId, itemId, { state: 'submitted', caption, photoLabel, rejectReason: undefined }),
       approveItem: (activationId, itemId) => updateItem(activationId, itemId, { state: 'approved' }),
@@ -223,7 +294,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       markAllRead: () => setNotifications((prev) => prev.map((n) => ({ ...n, unread: false }))),
       resolveRequest: (id) => setPending((prev) => prev.filter((p) => p.id !== id)),
     }),
-    [user, activations, notifications, team, pending, authed, progressOf, updateItem],
+    [user, activations, notifications, team, pending, authed, authLoading, session, progressOf, updateItem],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

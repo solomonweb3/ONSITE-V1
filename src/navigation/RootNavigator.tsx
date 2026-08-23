@@ -10,7 +10,10 @@ const navTheme = {
   colors: { ...DefaultTheme.colors, background: colors.white, card: colors.white, primary: colors.black },
 };
 
+import { View } from 'react-native';
+
 export function RootNavigator() {
-  const { authed } = useStore();
+  const { authed, authLoading } = useStore();
+  if (authLoading) return <View style={{ flex: 1, backgroundColor: colors.white }} />;
   return <NavigationContainer theme={navTheme}>{authed ? <MainTabs /> : <AuthStack />}</NavigationContainer>;
 }
