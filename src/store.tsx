@@ -3,8 +3,24 @@ import type { Session } from '@supabase/supabase-js';
 import { BadgeStatus } from './components/ui';
 import { supabase } from './lib/supabase';
 import * as api from './data/api';
+import { SEED_ACTIVATIONS, SEED_NOTIFICATIONS } from './data/seeds';
 
 export type AuthResult = { error?: string; needsConfirm?: boolean };
+
+// Built-in demo login that works offline for both paths, independent of the
+// Supabase email-confirmation setting. Real provisioned accounts use Supabase.
+const DEMO_EMAIL = 'demo@onsite.app';
+const DEMO_PASSWORD = 'onsite123';
+
+function localNotifications() {
+  return SEED_NOTIFICATIONS.map(([title, body, h], i) => ({
+    id: `n${i}`,
+    title,
+    body,
+    time: h >= 24 ? `${Math.round(h / 24)}d ago` : `${h}h ago`,
+    unread: h < 24,
+  }));
+}
 
 /* --------------------------------- Types ---------------------------------- */
 
@@ -129,6 +145,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [team] = useState<TeamMember[]>(seedTeam);
   const [pending, setPending] = useState<PendingRequest[]>(seedPending);
   const [session, setSession] = useState<Session | null>(null);
+  const [demoMode, setDemoMode] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const roleRef = React.useRef<'creator' | 'team'>('creator');
 
@@ -145,6 +162,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   // When a session exists: hydrate the profile, then load (or seed) the
   // user's activations + notifications from Supabase. On sign-out, clear.
   useEffect(() => {
+    if (demoMode && !session) {
+      // Offline demo data — no Supabase round-trip.
+      setActivations(SEED_ACTIVATIONS);
+      setNotifications(localNotifications());
+      setUser((u) => ({ ...u, role: roleRef.current }));
+      return;
+    }
     if (!session) {
       setActivations([]);
       setNotifications([]);
@@ -177,9 +201,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [session]);
+  }, [session, demoMode]);
 
-  const authed = !!session;
+  const authed = !!session || demoMode;
   const uid = session?.user.id;
 
   const progressOf = useCallback(
@@ -229,6 +253,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         return { needsConfirm: !data.session };
       },
       signInWithEmail: async (email, password) => {
+        // Built-in demo account: works for both "creating" and "joining" a team.
+        if (email.trim().toLowerCase() === DEMO_EMAIL && password === DEMO_PASSWORD) {
+          setDemoMode(true);
+          return {};
+        }
         const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
         return error ? { error: error.message } : {};
       },
@@ -241,6 +270,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         return error ? { error: error.message } : {};
       },
       signOut: async () => {
+        setDemoMode(false);
         await supabase.auth.signOut();
       },
       completeProfile: () => {
@@ -249,15 +279,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
       submitItem: (activationId, itemId, caption, photoLabel) => {
         updateItem(activationId, itemId, { state: 'submitted', caption, photoLabel, rejectReason: undefined });
-        api.submitItemRemote(itemId, caption, photoLabel).catch((e) => console.warn('[store] submit failed', e));
+        if (session) api.submitItemRemote(itemId, caption, photoLabel).catch((e) => console.warn('[store] submit failed', e));
       },
       approveItem: (activationId, itemId) => {
         updateItem(activationId, itemId, { state: 'approved' });
-        api.setItemStateRemote(itemId, 'approved').catch((e) => console.warn('[store] approve failed', e));
+        if (session) api.setItemStateRemote(itemId, 'approved').catch((e) => console.warn('[store] approve failed', e));
       },
       rejectItem: (activationId, itemId, reason) => {
         updateItem(activationId, itemId, { state: 'rejected', rejectReason: reason });
-        api.setItemStateRemote(itemId, 'rejected', reason).catch((e) => console.warn('[store] reject failed', e));
+        if (session) api.setItemStateRemote(itemId, 'rejected', reason).catch((e) => console.warn('[store] reject failed', e));
       },
       toggleMyItem: (activationId, itemId) => {
         const current = activations.find((a) => a.id === activationId)?.items.find((i) => i.id === itemId);
@@ -267,7 +297,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             a.id !== activationId ? a : { ...a, items: a.items.map((i) => (i.id === itemId ? { ...i, state: next } : i)) },
           ),
         );
-        api.setItemStateRemote(itemId, next).catch((e) => console.warn('[store] toggle failed', e));
+        if (session) api.setItemStateRemote(itemId, next).catch((e) => console.warn('[store] toggle failed', e));
       },
       markAllRead: () => {
         setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
@@ -275,7 +305,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
       resolveRequest: (id) => setPending((prev) => prev.filter((p) => p.id !== id)),
     }),
-    [user, activations, notifications, team, pending, authed, authLoading, session, uid, progressOf, updateItem],
+    [user, activations, notifications, team, pending, authed, authLoading, session, demoMode, uid, progressOf, updateItem],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
