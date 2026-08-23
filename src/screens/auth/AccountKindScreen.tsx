@@ -15,22 +15,22 @@ export function AccountKindScreen({ navigation }: Props) {
       <Header onBack={() => navigation.goBack()} />
       <View style={{ gap: 6, paddingTop: 8, paddingBottom: 24 }}>
         <ScreenTitle>Get started</ScreenTitle>
-        <Subtitle style={{ fontSize: 14 }}>Are you a creator or logging in as a team?</Subtitle>
+        <Subtitle style={{ fontSize: 14 }}>Are you setting up a team or joining one?</Subtitle>
       </View>
       <View style={{ gap: 12 }}>
         <SelectCard
-          title="I'm an individual creator"
-          subtitle="Log in with your phone number"
+          title="I'm creating a team"
+          subtitle="Set up and manage your team"
           onPress={() => {
-            setRole('creator');
-            navigation.navigate('Login');
+            setRole('team');
+            navigation.navigate('TeamAuth');
           }}
         />
         <SelectCard
-          title="I'm logging into a team"
-          subtitle="Team owners use email + password"
+          title="I'm joining a team"
+          subtitle="Log in as a team member"
           onPress={() => {
-            setRole('team');
+            setRole('creator');
             navigation.navigate('TeamAuth');
           }}
         />

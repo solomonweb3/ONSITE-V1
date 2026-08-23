@@ -1,9 +1,7 @@
 export type AuthStackParams = {
   Landing: undefined;
   AccountKind: undefined;
-  Login: undefined;
   TeamAuth: undefined;
-  JoinTeam: undefined;
 };
 
 export type HomeStackParams = {

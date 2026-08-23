@@ -18,9 +18,8 @@ export function LandingScreen({ navigation }: Props) {
       </View>
 
       <View style={{ gap: 12 }}>
-        <Button label="Create Account" onPress={() => navigation.navigate('AccountKind')} />
-        <Button label="Log In" variant="secondary" onPress={() => navigation.navigate('AccountKind')} />
-        <Text style={styles.link}>Have a brand link? Paste it here →</Text>
+        <Button label="Log In" onPress={() => navigation.navigate('AccountKind')} />
+        <Text style={styles.note}>Access is provided by your team. Contact your admin for a login.</Text>
       </View>
     </View>
   );
@@ -35,5 +34,5 @@ const styles = StyleSheet.create({
   },
   wordmark: { fontFamily: font.bold, fontSize: 34, color: colors.black, letterSpacing: 1.36 },
   tagline: { fontFamily: font.mono, fontSize: 13, color: colors.grey600 },
-  link: { fontFamily: font.regular, fontSize: 13, color: colors.grey600, paddingTop: 4 },
+  note: { fontFamily: font.regular, fontSize: 12, color: colors.grey600, paddingTop: 4, textAlign: 'center' },
 });
