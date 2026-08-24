@@ -65,6 +65,17 @@ export type TeamMember = {
 
 export type PendingRequest = { id: string; name: string; initials: string };
 
+export type Invite = { id: string; name: string; email: string; code: string };
+
+function makeCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
+function initialsOf(name: string) {
+  return name.trim().split(/\s+/).map((p) => p[0]?.toUpperCase() ?? '').slice(0, 2).join('') || '?';
+}
+
 export type User = {
   name: string;
   handle: string;
@@ -112,6 +123,7 @@ type Store = {
   notifications: AppNotification[];
   team: TeamMember[];
   pending: PendingRequest[];
+  invites: Invite[];
   teamName: string;
   authed: boolean;
   authLoading: boolean;
@@ -138,6 +150,8 @@ type Store = {
   toggleMyItem: (activationId: string, itemId: string) => void;
   markAllRead: () => void;
   resolveRequest: (id: string) => void;
+  inviteMember: (name: string, email: string) => Invite;
+  revokeInvite: (id: string) => void;
 };
 
 const Ctx = createContext<Store | null>(null);
@@ -148,6 +162,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [team] = useState<TeamMember[]>(seedTeam);
   const [pending, setPending] = useState<PendingRequest[]>(seedPending);
+  const [invites, setInvites] = useState<Invite[]>([]);
   const [session, setSession] = useState<Session | null>(null);
   const [demoMode, setDemoMode] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
@@ -238,6 +253,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       notifications,
       team,
       pending,
+      invites,
       teamName: TEAM_NAME,
       authed,
       authLoading,
@@ -341,8 +357,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (uid) api.markAllReadRemote(uid).catch((e) => console.warn('[store] markRead failed', e));
       },
       resolveRequest: (id) => setPending((prev) => prev.filter((p) => p.id !== id)),
+      inviteMember: (name, email) => {
+        const invite: Invite = { id: 'inv-' + Date.now(), name: name.trim(), email: email.trim(), code: makeCode() };
+        setInvites((prev) => [invite, ...prev]);
+        return invite;
+      },
+      revokeInvite: (id) => setInvites((prev) => prev.filter((i) => i.id !== id)),
     }),
-    [user, activations, notifications, team, pending, authed, authLoading, session, demoMode, uid, progressOf, updateItem],
+    [user, activations, notifications, team, pending, invites, authed, authLoading, session, demoMode, uid, progressOf, updateItem],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

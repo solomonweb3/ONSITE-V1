@@ -12,7 +12,7 @@ type Props = NativeStackScreenProps<TeamStackParams, 'TeamHome'>;
 
 export function TeamHomeScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { teamName, team, pending, resolveRequest } = useStore();
+  const { teamName, team, pending, invites, resolveRequest, revokeInvite } = useStore();
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.white, paddingTop: insets.top }}>
@@ -29,8 +29,29 @@ export function TeamHomeScreen({ navigation }: Props) {
         </View>
 
         <View style={{ paddingHorizontal: space.screenX, paddingTop: 16 }}>
-          <Button label="+ Invite Team Member" onPress={() => {}} />
+          <Button label="+ Invite Team Member" onPress={() => navigation.navigate('InviteMember')} />
         </View>
+
+        {invites.length > 0 ? (
+          <>
+            <View style={{ paddingHorizontal: space.screenX, paddingTop: 16 }}>
+              <Text style={styles.section}>INVITED ({invites.length})</Text>
+            </View>
+            <View style={{ paddingHorizontal: space.screenX, paddingTop: 4 }}>
+              {invites.map((inv) => (
+                <View key={inv.id} style={styles.inviteRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.pendingName}>{inv.name}</Text>
+                    <Text style={styles.inviteMeta}>{inv.email} · code {inv.code}</Text>
+                  </View>
+                  <Pressable onPress={() => revokeInvite(inv.id)}>
+                    <Text style={[styles.action, { color: colors.grey400 }]}>REVOKE</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          </>
+        ) : null}
 
         {pending.length > 0 ? (
           <>
@@ -88,6 +109,8 @@ const styles = StyleSheet.create({
   kicker: { fontFamily: font.mono, fontSize: 10, color: colors.grey600, letterSpacing: 0.2, marginTop: 2 },
   section: { fontFamily: font.monoMedium, fontSize: 10, color: colors.grey600, letterSpacing: 0.4 },
   pendingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10 },
+  inviteRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, gap: 12 },
+  inviteMeta: { fontFamily: font.mono, fontSize: 11, color: colors.grey600, marginTop: 2 },
   pendingName: { fontFamily: font.medium, fontSize: 14, color: colors.black },
   action: { fontFamily: font.monoMedium, fontSize: 10, letterSpacing: 0.2 },
   memberRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.grey100 },
