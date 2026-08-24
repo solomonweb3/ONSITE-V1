@@ -20,7 +20,6 @@ const doneSteps = [
 const optionalSteps = [
   { key: 'gmail', title: 'Link Gmail or Outlook', sub: 'Auto-suggests activations from email' },
   { key: 'notifs', title: 'Set notification preferences' },
-  { key: 'team', title: 'Join or create a team', sub: 'Optional — for agency-managed creators' },
 ];
 
 function Ring({ done, total }: { done: number; total: number }) {
