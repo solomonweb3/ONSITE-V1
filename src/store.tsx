@@ -128,6 +128,7 @@ type Store = {
   signOut: () => Promise<void>;
   // actions
   completeProfile: () => void;
+  createActivation: (input: api.NewActivationInput) => Promise<string>;
   submitItem: (activationId: string, itemId: string, caption: string, photoLabel: string) => void;
   approveItem: (activationId: string, itemId: string) => void;
   rejectItem: (activationId: string, itemId: string, reason: string) => void;
@@ -276,6 +277,26 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       completeProfile: () => {
         setUser((u) => ({ ...u, profileComplete: true }));
         if (session) supabase.from('profiles').update({ profile_complete: true }).eq('id', session.user.id).then(() => {});
+      },
+      createActivation: async (input) => {
+        if (session) {
+          const created = await api.createActivationRemote(session.user.id, input);
+          setActivations((prev) => [created, ...prev]);
+          return created.id;
+        }
+        // Demo / offline: keep it local.
+        const id = 'local-' + Date.now();
+        setActivations((prev) => [
+          {
+            id,
+            title: input.title,
+            subtitle: input.subtitle,
+            status: input.status,
+            items: input.items.map((it, i) => ({ id: `${id}-i${i}`, title: it.title, owner: it.owner, due: it.due, state: 'todo' as const })),
+          },
+          ...prev,
+        ]);
+        return id;
       },
       submitItem: (activationId, itemId, caption, photoLabel) => {
         updateItem(activationId, itemId, { state: 'submitted', caption, photoLabel, rejectReason: undefined });

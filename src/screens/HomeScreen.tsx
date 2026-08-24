@@ -19,7 +19,7 @@ export function HomeScreen({ navigation }: Props) {
     <View style={{ flex: 1, backgroundColor: colors.white, paddingTop: insets.top }}>
       <View style={styles.header}>
         <ScreenTitle>Activations</ScreenTitle>
-        <Pressable style={styles.add} onPress={() => {}}>
+        <Pressable style={styles.add} onPress={() => navigation.navigate('NewActivation')}>
           <Plus size={22} color={colors.white} />
         </Pressable>
       </View>

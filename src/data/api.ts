@@ -101,6 +101,38 @@ export async function seedActivations(uid: string) {
   }
 }
 
+export type NewActivationInput = {
+  title: string;
+  subtitle: string;
+  status: BadgeStatus; // 'Live' | 'Completed'
+  items: { title: string; owner: 'client' | 'my'; due: string }[];
+};
+
+export async function createActivationRemote(uid: string, input: NewActivationInput): Promise<Activation> {
+  const { data: act, error } = await supabase
+    .from('activations')
+    .insert({ creator_id: uid, title: input.title, subtitle: input.subtitle, status: statusToDb[input.status] ?? 'live' })
+    .select('id')
+    .single();
+  if (error || !act) throw error;
+
+  let items: ChecklistItem[] = [];
+  if (input.items.length) {
+    const rows = input.items.map((it, idx) => ({
+      activation_id: act.id,
+      title: it.title,
+      owner: it.owner,
+      due_label: it.due,
+      state: 'todo' as const,
+      position: idx,
+    }));
+    const { data: inserted, error: e2 } = await supabase.from('checklist_items').insert(rows).select('*');
+    if (e2) throw e2;
+    items = (inserted as ItemRow[]).slice().sort((a, b) => a.position - b.position).map(mapItem);
+  }
+  return { id: act.id, title: input.title, subtitle: input.subtitle, status: input.status, items };
+}
+
 /* ------------------------------ mutations --------------------------------- */
 
 export async function submitItemRemote(itemId: string, caption: string, mediaLabel: string) {
