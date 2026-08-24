@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Image, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { HomeStackParams } from '../navigation/types';
@@ -27,9 +27,14 @@ export function BrandReviewItemScreen({ navigation, route }: Props) {
         </View>
 
         <View style={{ paddingHorizontal: space.screenX, paddingTop: 16, flex: 1 }}>
-          <View style={styles.preview}>
-            <Text style={styles.previewText}>▶ PREVIEW</Text>
-          </View>
+          {item.mediaUri && !/\.(mp4|mov|webm)$/i.test(item.photoLabel || '') ? (
+            <Image source={{ uri: item.mediaUri }} style={styles.preview} resizeMode="cover" />
+          ) : (
+            <View style={styles.preview}>
+              <Text style={styles.previewText}>{item.mediaUri ? '▶ VIDEO' : '▶ PREVIEW'}</Text>
+            </View>
+          )}
+          {item.caption ? <Text style={styles.caption}>{item.caption}</Text> : null}
         </View>
       </View>
 
@@ -61,6 +66,7 @@ const styles = StyleSheet.create({
   sub: { fontFamily: font.regular, fontSize: 13, color: colors.grey600 },
   preview: { flex: 1, maxHeight: 400, backgroundColor: colors.black, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   previewText: { fontFamily: font.monoMedium, fontSize: 11, color: colors.white, letterSpacing: 1 },
+  caption: { fontFamily: font.regular, fontSize: 13, color: colors.grey600, marginTop: 12 },
   actionBtn: { height: 48, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   actionLabel: { fontFamily: font.semibold, fontSize: 15 },
 });

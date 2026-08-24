@@ -16,6 +16,7 @@ type ItemRow = {
   state: ChecklistItem['state'];
   caption: string | null;
   media_label: string | null;
+  media_url: string | null;
   reject_reason: string | null;
   position: number;
 };
@@ -37,6 +38,7 @@ function mapItem(r: ItemRow): ChecklistItem {
     state: r.state,
     caption: r.caption ?? undefined,
     photoLabel: r.media_label ?? undefined,
+    mediaUri: r.media_url ?? undefined,
     rejectReason: r.reject_reason ?? undefined,
   };
 }
@@ -70,7 +72,7 @@ export async function hydrateProfile(uid: string, role: 'creator' | 'team', emai
 export async function loadActivations(uid: string): Promise<Activation[]> {
   const { data, error } = await supabase
     .from('activations')
-    .select('id, title, subtitle, status, checklist_items(id, title, owner, due_label, state, caption, media_label, reject_reason, position)')
+    .select('id, title, subtitle, status, checklist_items(id, title, owner, due_label, state, caption, media_label, media_url, reject_reason, position)')
     .eq('creator_id', uid)
     .order('created_at', { ascending: true });
   if (error) throw error;
@@ -135,11 +137,22 @@ export async function createActivationRemote(uid: string, input: NewActivationIn
 
 /* ------------------------------ mutations --------------------------------- */
 
-export async function submitItemRemote(itemId: string, caption: string, mediaLabel: string) {
+export async function submitItemRemote(itemId: string, caption: string, mediaLabel: string, mediaUrl?: string) {
   await supabase
     .from('checklist_items')
-    .update({ state: 'submitted', caption, media_label: mediaLabel, reject_reason: null, submitted_at: new Date().toISOString() })
+    .update({ state: 'submitted', caption, media_label: mediaLabel, media_url: mediaUrl ?? null, reject_reason: null, submitted_at: new Date().toISOString() })
     .eq('id', itemId);
+}
+
+// Upload a captured file to the "content" Storage bucket, return its public URL.
+export async function uploadContent(uid: string, fileUri: string, ext: string, contentType: string): Promise<string> {
+  const path = `${uid}/${Date.now()}.${ext}`;
+  const res = await fetch(fileUri);
+  const blob = await res.blob();
+  const { error } = await supabase.storage.from('content').upload(path, blob, { contentType, upsert: true });
+  if (error) throw error;
+  const { data } = supabase.storage.from('content').getPublicUrl(path);
+  return data.publicUrl;
 }
 
 export async function setItemStateRemote(itemId: string, state: ChecklistItem['state'], rejectReason?: string) {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, Image, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { TeamStackParams } from '../navigation/types';
@@ -36,7 +36,11 @@ function DeliverableCard({ item }: { item: ChecklistItem }) {
 
       {hasUpload ? (
         <View style={styles.upload}>
-          <View style={styles.thumb} />
+          {item.mediaUri && !/\.(mp4|mov|webm)$/i.test(item.photoLabel || '') ? (
+            <Image source={{ uri: item.mediaUri }} style={styles.thumb} resizeMode="cover" />
+          ) : (
+            <View style={styles.thumb} />
+          )}
           <View style={{ flex: 1, gap: 3 }}>
             <Text style={styles.uploadName} numberOfLines={1}>{item.photoLabel}</Text>
             {item.caption ? <Text style={styles.uploadCaption} numberOfLines={2}>{item.caption}</Text> : null}

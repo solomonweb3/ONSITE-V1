@@ -1,49 +1,86 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Pressable, TextInput, StyleSheet } from 'react-native';
+import { View, Text, Image, ScrollView, Pressable, TextInput, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import * as ImagePicker from 'expo-image-picker';
 import { HomeStackParams } from '../navigation/types';
 import { colors, font, space } from '../theme';
 import { Button, Meta } from '../components/ui';
 import { Camera, Check, Close } from '../components/icons';
-import { useStore } from '../store';
+import { useStore, MediaFile } from '../store';
 
 type Props = NativeStackScreenProps<HomeStackParams, 'ItemDetail'>;
-
-const captureOptions = [
-  { key: 'camera', title: 'Camera', sub: 'Shoot now' },
-  { key: 'library', title: 'Photo Library', sub: 'Choose existing' },
-  { key: 'link', title: 'Paste Link', sub: 'TikTok / IG URL' },
-];
+type Captured = MediaFile & { isVideo: boolean };
 
 export function ItemDetailScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const { activation, submitItem, progressOf } = useStore();
+  const { activation, uploadAndSubmit, progressOf } = useStore();
   const a = activation(route.params.activationId);
   const item = a?.items.find((i) => i.id === route.params.itemId);
   const [note, setNote] = useState('');
-  const [captured, setCaptured] = useState<{ label: string } | null>(
-    item && (item.state === 'submitted' || item.state === 'approved')
-      ? { label: item.photoLabel ?? 'tiktok.com/@solomon/video/8213...' }
-      : null,
-  );
+  const [captured, setCaptured] = useState<Captured | null>(null);
+  const [showLink, setShowLink] = useState(false);
+  const [link, setLink] = useState('');
+  const [busy, setBusy] = useState(false);
 
   if (!a || !item) return null;
 
-  const submit = () => {
-    submitItem(a.id, item.id, note || item.caption || '', captured?.label ?? 'UPLOAD_01.mp4');
-    if (progressOf(a.id) === 100) navigation.replace('AllComplete', { activationId: a.id });
-    else navigation.goBack();
-  };
-
-  const ownerLabel = item.owner === 'client' ? 'Client item' : 'My item';
   const isApproved = item.state === 'approved';
   const isSubmitted = item.state === 'submitted';
   const isRejected = item.state === 'rejected';
 
+  const fromAsset = (asset: ImagePicker.ImagePickerAsset): Captured => {
+    const isVideo = asset.type === 'video';
+    const name = asset.fileName || `UPLOAD.${isVideo ? 'mp4' : 'jpg'}`;
+    const ext = (name.split('.').pop() || (isVideo ? 'mp4' : 'jpg')).toLowerCase();
+    return {
+      uri: asset.uri,
+      label: name,
+      ext,
+      contentType: asset.mimeType || (isVideo ? 'video/mp4' : 'image/jpeg'),
+      isVideo,
+    };
+  };
+
+  const pickFromLibrary = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) return;
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.All, quality: 0.8 });
+    if (!res.canceled && res.assets?.[0]) setCaptured(fromAsset(res.assets[0]));
+  };
+
+  const shootPhoto = async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) return;
+    const res = await ImagePicker.launchCameraAsync({ quality: 0.8 });
+    if (!res.canceled && res.assets?.[0]) setCaptured(fromAsset(res.assets[0]));
+  };
+
+  const useLink = () => {
+    const url = link.trim();
+    if (!url) return;
+    const isVideo = /\.(mp4|mov|webm)$/i.test(url);
+    setCaptured({ uri: url, label: url.replace(/^https?:\/\//, '').slice(0, 40), ext: 'link', contentType: 'text/uri-list', remote: true, isVideo });
+    setShowLink(false);
+  };
+
+  const submit = async () => {
+    if (!captured) return;
+    setBusy(true);
+    await uploadAndSubmit(a.id, item.id, note || item.caption || '', captured);
+    if (progressOf(a.id) === 100) navigation.replace('AllComplete', { activationId: a.id });
+    else navigation.goBack();
+  };
+
+  // What to preview: a freshly captured file, or the item's existing media.
+  const displayUri = captured?.uri ?? item.mediaUri;
+  const displayLabel = captured?.label ?? item.photoLabel;
+  const displayVideo = captured?.isVideo ?? /\.(mp4|mov|webm)$/i.test(displayLabel || '');
+  const ownerLabel = item.owner === 'client' ? 'Client item' : 'My item';
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.white, paddingTop: insets.top }}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.head}>
           <Pressable onPress={() => navigation.goBack()}>
             <Text style={styles.backLabel}>← BACK TO CHECKLIST</Text>
@@ -54,7 +91,6 @@ export function ItemDetailScreen({ navigation, route }: Props) {
           </Text>
         </View>
 
-        {/* Approved banner */}
         {isApproved ? (
           <View style={styles.section}>
             <View style={styles.approvedBanner}>
@@ -67,7 +103,6 @@ export function ItemDetailScreen({ navigation, route }: Props) {
           </View>
         ) : null}
 
-        {/* Rejected banner */}
         {isRejected ? (
           <View style={styles.section}>
             <View style={styles.rejectBanner}>
@@ -75,9 +110,7 @@ export function ItemDetailScreen({ navigation, route }: Props) {
                 <Close size={15} color={colors.white} />
                 <Text style={styles.approvedTitle}>Revision requested</Text>
               </View>
-              <Text style={[styles.approvedSub, { color: '#F3C9C4' }]}>
-                {item.rejectReason ?? 'The brand asked for a change.'}
-              </Text>
+              <Text style={[styles.approvedSub, { color: '#F3C9C4' }]}>{item.rejectReason ?? 'The brand asked for a change.'}</Text>
             </View>
           </View>
         ) : null}
@@ -87,44 +120,48 @@ export function ItemDetailScreen({ navigation, route }: Props) {
           <>
             <SectionLabel>{isRejected ? 'REPLACE CONTENT' : 'ADD CONTENT'}</SectionLabel>
             <View style={[styles.section, { flexDirection: 'row', gap: 10 }]}>
-              {captureOptions.map((opt) => (
-                <Pressable
-                  key={opt.key}
-                  onPress={() => setCaptured({ label: 'UPLOAD_01.mp4' })}
-                  style={({ pressed }) => [styles.captureCard, pressed && { backgroundColor: colors.grey50 }]}
-                >
-                  <View style={styles.captureIcon}>
-                    <Camera size={16} color={colors.black} />
-                  </View>
-                  <Text style={styles.captureTitle}>{opt.title}</Text>
-                  <Text style={styles.captureSub}>{opt.sub}</Text>
-                </Pressable>
-              ))}
+              <CaptureCard title="Camera" sub="Shoot now" onPress={shootPhoto} />
+              <CaptureCard title="Photo Library" sub="Choose existing" onPress={pickFromLibrary} />
+              <CaptureCard title="Paste Link" sub="TikTok / IG URL" onPress={() => setShowLink((s) => !s)} />
             </View>
+            {showLink ? (
+              <View style={[styles.section, { flexDirection: 'row', gap: 8, alignItems: 'center' }]}>
+                <TextInput
+                  value={link}
+                  onChangeText={setLink}
+                  placeholder="https://…"
+                  placeholderTextColor={colors.grey400}
+                  autoCapitalize="none"
+                  style={styles.linkInput}
+                />
+                <Button label="Use" onPress={useLink} style={{ height: 44, paddingHorizontal: 18 }} />
+              </View>
+            ) : null}
           </>
         ) : null}
 
-        {/* Submitted / captured preview */}
-        {captured || isSubmitted || isApproved ? (
+        {/* Media preview */}
+        {displayUri ? (
           <>
-            <SectionLabel>{isApproved ? 'DELIVERED' : 'SUBMITTED'}</SectionLabel>
+            <SectionLabel>{isApproved ? 'DELIVERED' : 'CONTENT'}</SectionLabel>
             <View style={styles.section}>
               <View style={styles.previewCard}>
-                <View style={styles.thumb} />
+                {!displayVideo ? (
+                  <Image source={{ uri: displayUri }} style={styles.thumb} resizeMode="cover" />
+                ) : (
+                  <View style={[styles.thumb, { alignItems: 'center', justifyContent: 'center' }]}>
+                    <Text style={{ color: colors.white, fontFamily: font.mono, fontSize: 10 }}>▶</Text>
+                  </View>
+                )}
                 <View style={{ flex: 1, gap: 3 }}>
-                  <Text style={styles.previewTitle} numberOfLines={1}>
-                    {captured?.label ?? item.photoLabel}
-                  </Text>
-                  <Text style={styles.previewMeta}>
-                    {isApproved ? 'Approved · Live' : 'Thumbnail fetched · Live'}
-                  </Text>
+                  <Text style={styles.previewTitle} numberOfLines={1}>{displayLabel}</Text>
+                  <Text style={styles.previewMeta}>{isApproved ? 'Approved · Live' : captured ? 'Ready to submit' : 'Submitted · in review'}</Text>
                 </View>
               </View>
             </View>
           </>
         ) : null}
 
-        {/* Note input (only when actionable) */}
         {!isApproved ? (
           <View style={[styles.section, { paddingTop: 4 }]}>
             <View style={styles.noteBox}>
@@ -141,7 +178,6 @@ export function ItemDetailScreen({ navigation, route }: Props) {
         ) : null}
       </ScrollView>
 
-      {/* Footer action */}
       <View style={{ paddingHorizontal: space.screenX, paddingBottom: insets.bottom + 16, paddingTop: 4 }}>
         {isApproved ? (
           <Button label="Back to Checklist" variant="secondary" onPress={() => navigation.goBack()} />
@@ -149,11 +185,24 @@ export function ItemDetailScreen({ navigation, route }: Props) {
           <Button
             label={isRejected ? 'Resubmit for Review' : 'Mark Item Complete'}
             onPress={submit}
+            loading={busy}
             disabled={!captured && !isSubmitted}
           />
         )}
       </View>
     </View>
+  );
+}
+
+function CaptureCard({ title, sub, onPress }: { title: string; sub: string; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.captureCard, pressed && { backgroundColor: colors.grey50 }]}>
+      <View style={styles.captureIcon}>
+        <Camera size={16} color={colors.black} />
+      </View>
+      <Text style={styles.captureTitle}>{title}</Text>
+      <Text style={styles.captureSub}>{sub}</Text>
+    </Pressable>
   );
 }
 
@@ -171,34 +220,12 @@ const styles = StyleSheet.create({
   title: { fontFamily: font.bold, fontSize: 20, color: colors.black },
   meta: { fontFamily: font.regular, fontSize: 13, color: colors.grey600 },
   section: { paddingHorizontal: space.screenX, paddingVertical: 6 },
-  captureCard: {
-    flex: 1,
-    borderWidth: 1.5,
-    borderColor: colors.grey300,
-    borderRadius: 10,
-    paddingVertical: 18,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    gap: 6,
-  },
-  captureIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.grey100,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  captureCard: { flex: 1, borderWidth: 1.5, borderColor: colors.grey300, borderRadius: 10, paddingVertical: 18, paddingHorizontal: 10, alignItems: 'center', gap: 6 },
+  captureIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.grey100, alignItems: 'center', justifyContent: 'center' },
   captureTitle: { fontFamily: font.semibold, fontSize: 12, color: colors.black },
   captureSub: { fontFamily: font.mono, fontSize: 9, color: colors.grey600, textAlign: 'center' },
-  previewCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: colors.grey50,
-    borderRadius: 12,
-    padding: 14,
-  },
+  linkInput: { flex: 1, height: 44, borderWidth: 1.5, borderColor: colors.grey200, borderRadius: 10, paddingHorizontal: 14, fontFamily: font.mono, fontSize: 13, color: colors.black },
+  previewCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.grey50, borderRadius: 12, padding: 14 },
   thumb: { width: 56, height: 56, borderRadius: 8, backgroundColor: colors.black },
   previewTitle: { fontFamily: font.medium, fontSize: 12, color: colors.black },
   previewMeta: { fontFamily: font.mono, fontSize: 10, color: colors.success },

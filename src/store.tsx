@@ -6,6 +6,7 @@ import * as api from './data/api';
 import { SEED_ACTIVATIONS, SEED_NOTIFICATIONS } from './data/seeds';
 
 export type AuthResult = { error?: string; needsConfirm?: boolean };
+export type MediaFile = { uri: string; ext: string; contentType: string; label: string; remote?: boolean };
 
 // Built-in demo login that works offline for both paths, independent of the
 // Supabase email-confirmation setting. Real provisioned accounts use Supabase.
@@ -34,7 +35,8 @@ export type ChecklistItem = {
   due: string; // e.g. "6:00 PM"
   state: ItemState;
   caption?: string;
-  photoLabel?: string; // stand-in for captured media
+  photoLabel?: string; // filename / link shown in the UI
+  mediaUri?: string; // displayable media URL (local file uri in demo, Storage URL when live)
   rejectReason?: string;
 };
 
@@ -129,7 +131,8 @@ type Store = {
   // actions
   completeProfile: () => void;
   createActivation: (input: api.NewActivationInput) => Promise<string>;
-  submitItem: (activationId: string, itemId: string, caption: string, photoLabel: string) => void;
+  submitItem: (activationId: string, itemId: string, caption: string, photoLabel: string, mediaUri?: string) => void;
+  uploadAndSubmit: (activationId: string, itemId: string, caption: string, file: MediaFile) => Promise<void>;
   approveItem: (activationId: string, itemId: string) => void;
   rejectItem: (activationId: string, itemId: string, reason: string) => void;
   toggleMyItem: (activationId: string, itemId: string) => void;
@@ -298,9 +301,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         ]);
         return id;
       },
-      submitItem: (activationId, itemId, caption, photoLabel) => {
-        updateItem(activationId, itemId, { state: 'submitted', caption, photoLabel, rejectReason: undefined });
-        if (session) api.submitItemRemote(itemId, caption, photoLabel).catch((e) => console.warn('[store] submit failed', e));
+      submitItem: (activationId, itemId, caption, photoLabel, mediaUri) => {
+        updateItem(activationId, itemId, { state: 'submitted', caption, photoLabel, mediaUri, rejectReason: undefined });
+        if (session) api.submitItemRemote(itemId, caption, photoLabel, mediaUri).catch((e) => console.warn('[store] submit failed', e));
+      },
+      uploadAndSubmit: async (activationId, itemId, caption, file) => {
+        let mediaUri = file.uri;
+        // A pasted link is already a URL; captured files upload to Storage when live.
+        if (!file.remote && session) {
+          try {
+            mediaUri = await api.uploadContent(session.user.id, file.uri, file.ext, file.contentType);
+          } catch (e) {
+            console.warn('[store] upload failed, keeping local uri', e);
+          }
+        }
+        updateItem(activationId, itemId, { state: 'submitted', caption, photoLabel: file.label, mediaUri, rejectReason: undefined });
+        if (session) api.submitItemRemote(itemId, caption, file.label, mediaUri).catch((e) => console.warn('[store] submit failed', e));
       },
       approveItem: (activationId, itemId) => {
         updateItem(activationId, itemId, { state: 'approved' });
