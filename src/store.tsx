@@ -150,7 +150,7 @@ type Store = {
   toggleMyItem: (activationId: string, itemId: string) => void;
   markAllRead: () => void;
   resolveRequest: (id: string) => void;
-  inviteMember: (name: string, email: string) => Invite;
+  inviteMember: (name: string, email: string) => Promise<Invite>;
   revokeInvite: (id: string) => void;
 };
 
@@ -212,6 +212,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (!cancelled) {
           setActivations(acts);
           setNotifications(notifs);
+        }
+        try {
+          const invs = await api.loadInvites(uid);
+          if (!cancelled) setInvites(invs);
+        } catch {
+          // invites table may not exist yet — ignore
         }
       } catch (e) {
         console.warn('[store] data load failed', e);
@@ -357,7 +363,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (uid) api.markAllReadRemote(uid).catch((e) => console.warn('[store] markRead failed', e));
       },
       resolveRequest: (id) => setPending((prev) => prev.filter((p) => p.id !== id)),
-      inviteMember: (name, email) => {
+      inviteMember: async (name, email) => {
+        // Live: provision a real member login via the Edge Function.
+        if (session) {
+          const res = await api.inviteMemberRemote(name.trim(), email.trim());
+          const invite: Invite = { id: 'inv-' + Date.now(), name: name.trim(), email: res.email, code: res.tempPassword };
+          setInvites((prev) => [invite, ...prev]);
+          return invite;
+        }
+        // Demo: local invite code.
         const invite: Invite = { id: 'inv-' + Date.now(), name: name.trim(), email: email.trim(), code: makeCode() };
         setInvites((prev) => [invite, ...prev]);
         return invite;

@@ -199,6 +199,23 @@ export async function markAllReadRemote(uid: string) {
   await supabase.from('notifications').update({ read: true }).eq('profile_id', uid).eq('read', false);
 }
 
+/* -------------------------------- invites --------------------------------- */
+
+export type InviteRow = { id: string; name: string; email: string; code: string };
+
+// Provision a real member login via the admin Edge Function.
+export async function inviteMemberRemote(name: string, email: string): Promise<{ email: string; tempPassword: string }> {
+  const { data, error } = await supabase.functions.invoke('invite-member', { body: { email, name } });
+  if (error) throw new Error(error.message);
+  if (data?.error) throw new Error(data.error);
+  return { email: data.email, tempPassword: data.tempPassword };
+}
+
+export async function loadInvites(uid: string): Promise<InviteRow[]> {
+  const { data } = await supabase.from('invites').select('id, name, email, code').eq('inviter_id', uid).order('created_at', { ascending: false });
+  return (data ?? []).map((r: { id: string; name: string | null; email: string; code: string }) => ({ id: r.id, name: r.name ?? '', email: r.email, code: r.code }));
+}
+
 /* ------------------------------ bootstrap --------------------------------- */
 
 // Load everything for a user; seed demo data on a first, empty account.

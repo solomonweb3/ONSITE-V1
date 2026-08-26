@@ -16,8 +16,20 @@ export function InviteMemberScreen({ navigation }: Props) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [created, setCreated] = useState<Invite | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const submit = () => setCreated(inviteMember(name, email));
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      setCreated(await inviteMember(name, email));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not create invite');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.white, paddingTop: insets.top }}>
@@ -39,8 +51,9 @@ export function InviteMemberScreen({ navigation }: Props) {
           <Field value={email} onChangeText={setEmail} placeholder="name@email.com" keyboardType="email-address" autoCapitalize="none" />
 
           <View style={{ marginTop: 24 }}>
-            <Button label="Generate Invite" onPress={submit} disabled={name.trim().length < 2 || !email.includes('@')} />
+            <Button label="Generate Invite" onPress={submit} loading={busy} disabled={name.trim().length < 2 || !email.includes('@')} />
           </View>
+          {error ? <Text style={[styles.sub, { color: colors.red, marginTop: 14 }]}>{error}</Text> : null}
         </View>
       ) : (
         <View style={{ paddingHorizontal: space.screenX, paddingTop: 8, alignItems: 'center' }}>
@@ -48,10 +61,10 @@ export function InviteMemberScreen({ navigation }: Props) {
             <Check size={22} color={colors.white} />
           </View>
           <Text style={styles.successTitle}>Invite ready for {created.name}</Text>
-          <Text style={styles.sub}>Share this code — they enter it when they log in.</Text>
+          <Text style={styles.sub}>Share these — they log in with their email + this password.</Text>
 
           <View style={styles.codeBox}>
-            <Text style={styles.codeLabel}>INVITE CODE</Text>
+            <Text style={styles.codeLabel}>TEMPORARY PASSWORD</Text>
             <Text style={styles.code}>{created.code}</Text>
             <Text style={styles.codeEmail}>{created.email}</Text>
           </View>
