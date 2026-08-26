@@ -3,25 +3,13 @@ import type { Session } from '@supabase/supabase-js';
 import { BadgeStatus } from './components/ui';
 import { supabase } from './lib/supabase';
 import * as api from './data/api';
-import { SEED_ACTIVATIONS, SEED_NOTIFICATIONS } from './data/seeds';
 
 export type AuthResult = { error?: string; needsConfirm?: boolean };
 export type MediaFile = { uri: string; ext: string; contentType: string; label: string; remote?: boolean };
 
-// Built-in demo login that works offline for both paths, independent of the
-// Supabase email-confirmation setting. Real provisioned accounts use Supabase.
+// Built-in demo login that works offline as a fallback if real auth is down.
 const DEMO_EMAIL = 'demo@onsite.app';
 const DEMO_PASSWORD = 'onsite123';
-
-function localNotifications() {
-  return SEED_NOTIFICATIONS.map(([title, body, h], i) => ({
-    id: `n${i}`,
-    title,
-    body,
-    time: h >= 24 ? `${Math.round(h / 24)}d ago` : `${h}h ago`,
-    unread: h < 24,
-  }));
-}
 
 /* --------------------------------- Types ---------------------------------- */
 
@@ -182,9 +170,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   // user's activations + notifications from Supabase. On sign-out, clear.
   useEffect(() => {
     if (demoMode && !session) {
-      // Offline demo data — no Supabase round-trip.
-      setActivations(SEED_ACTIVATIONS);
-      setNotifications(localNotifications());
+      // Offline fallback — start empty like any new account.
+      setActivations([]);
+      setNotifications([]);
       setUser((u) => ({ ...u, role: roleRef.current }));
       return;
     }
@@ -199,14 +187,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       try {
         const profile = await api.hydrateProfile(uid, roleRef.current, session.user.email);
         if (!cancelled && profile) {
-          setUser((u) => ({
-            ...u,
-            name: profile.name || u.name,
-            handle: profile.handle || u.handle,
-            phone: profile.phone || u.phone,
-            role: (profile.role as 'creator' | 'team') || roleRef.current,
-            profileComplete: profile.profile_complete ?? u.profileComplete,
-          }));
+          setUser((u) => {
+            const name = profile.name || u.name;
+            return {
+              ...u,
+              name,
+              handle: profile.handle || u.handle,
+              phone: profile.phone || u.phone,
+              initials: initialsOf(name),
+              role: (profile.role as 'creator' | 'team') || roleRef.current,
+              profileComplete: profile.profile_complete ?? u.profileComplete,
+            };
+          });
         }
         const { activations: acts, notifications: notifs } = await api.bootstrapUserData(uid);
         if (!cancelled) {

@@ -218,17 +218,10 @@ export async function loadInvites(uid: string): Promise<InviteRow[]> {
 
 /* ------------------------------ bootstrap --------------------------------- */
 
-// Load everything for a user; seed demo data on a first, empty account.
+// Load a user's data. New accounts start empty — they create their own
+// activations (or link email later). No demo/brand seeding.
 export async function bootstrapUserData(uid: string) {
-  let activations = await loadActivations(uid);
-  if (activations.length === 0) {
-    await seedActivations(uid);
-    activations = await loadActivations(uid);
-  }
-  let notifications = await loadNotifications(uid);
-  if (notifications.length === 0) {
-    await seedNotifications(uid);
-    notifications = await loadNotifications(uid);
-  }
+  const activations = await loadActivations(uid);
+  const notifications = await loadNotifications(uid);
   return { activations, notifications };
 }

@@ -32,7 +32,14 @@ function Row({ label, value, onPress }: { label: string; value?: string; onPress
 
 export function ProfileScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { user, unreadCount, signOut } = useStore();
+  const { user, unreadCount, signOut, activations, progressOf, team, teamName } = useStore();
+
+  // Real stats derived from the user's data.
+  const totalItems = activations.reduce((n, a) => n + a.items.length, 0);
+  const completion = activations.length
+    ? Math.round(activations.reduce((n, a) => n + progressOf(a.id), 0) / activations.length)
+    : 0;
+  const isMember = user.role === 'creator';
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.white, paddingTop: insets.top }}>
@@ -56,13 +63,36 @@ export function ProfileScreen({ navigation }: Props) {
 
         <View style={{ paddingHorizontal: space.screenX, paddingTop: 8, paddingBottom: 12 }}>
           <View style={styles.stats}>
-            <Stat value="12" label="Activations" />
-            <Stat value="94%" label="Completion" />
-            <Stat value="38" label="Items this mo." />
+            <Stat value={`${activations.length}`} label="Activations" />
+            <Stat value={`${completion}%`} label="Completion" />
+            <Stat value={`${totalItems}`} label="Deliverables" />
           </View>
         </View>
 
-        <View style={{ paddingHorizontal: space.screenX, paddingTop: 8 }}>
+        {isMember ? (
+          <>
+            <View style={{ paddingHorizontal: space.screenX, paddingTop: 8 }}>
+              <Text style={styles.section}>YOUR TEAM</Text>
+            </View>
+            <View style={{ paddingHorizontal: space.screenX, paddingTop: 8 }}>
+              <View style={styles.teamCard}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.teamName}>{teamName}</Text>
+                  <Text style={styles.teamMeta}>Member · {team.length + 2} people</Text>
+                </View>
+                <View style={{ flexDirection: 'row' }}>
+                  {team.slice(0, 3).map((m, i) => (
+                    <View key={m.id} style={[styles.teamAvatar, { marginLeft: i === 0 ? 0 : -8 }]}>
+                      <Text style={styles.teamAvatarText}>{m.initials}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            </View>
+          </>
+        ) : null}
+
+        <View style={{ paddingHorizontal: space.screenX, paddingTop: 16 }}>
           <Text style={styles.section}>SETTINGS</Text>
         </View>
         <View style={{ paddingHorizontal: space.screenX }}>
@@ -92,6 +122,14 @@ const styles = StyleSheet.create({
   statValue: { fontFamily: font.bold, fontSize: 17, color: colors.black },
   statLabel: { fontFamily: font.mono, fontSize: 10, color: colors.grey600 },
   section: { fontFamily: font.monoMedium, fontSize: 10, color: colors.grey600, letterSpacing: 0.4, marginBottom: 4 },
+  teamCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.grey50, borderRadius: 12, padding: 16 },
+  teamName: { fontFamily: font.bold, fontSize: 16, color: colors.black },
+  teamMeta: { fontFamily: font.mono, fontSize: 11, color: colors.grey600, marginTop: 2 },
+  teamAvatar: {
+    width: 30, height: 30, borderRadius: 15, backgroundColor: colors.grey200,
+    alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.grey50,
+  },
+  teamAvatarText: { fontFamily: font.semibold, fontSize: 10, color: colors.grey600 },
   row: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.grey100,
