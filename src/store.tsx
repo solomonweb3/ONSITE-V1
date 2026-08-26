@@ -279,13 +279,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         return { needsConfirm: !data.session };
       },
       signInWithEmail: async (email, password) => {
-        // Built-in demo account: works for both "creating" and "joining" a team.
+        // Try the real Supabase account first.
+        const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+        if (!error) return {};
+        // Fallback: built-in demo works offline if real auth is unavailable.
         if (email.trim().toLowerCase() === DEMO_EMAIL && password === DEMO_PASSWORD) {
           setDemoMode(true);
           return {};
         }
-        const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-        return error ? { error: error.message } : {};
+        return { error: error.message };
       },
       sendPhoneCode: async (phone) => {
         const { error } = await supabase.auth.signInWithOtp({ phone: phone.trim() });
