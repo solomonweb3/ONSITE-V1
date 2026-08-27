@@ -23,7 +23,14 @@
     },
     "plugins": [
       "expo-font",
-      "expo-video"
+      "expo-video",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow ONSITE to access your photos so you can upload content.",
+          "cameraPermission": false
+        }
+      ]
     ]
   }
 }

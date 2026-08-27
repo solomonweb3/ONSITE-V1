@@ -73,6 +73,26 @@ export function Camera({ size = 24, color = colors.black }: IconProps) {
   );
 }
 
+export function ImageIcon({ size = 24, color = colors.black }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x={3.5} y={5} width={17} height={14} rx={2.5} stroke={color} strokeWidth={1.8} />
+      <Circle cx={9} cy={10} r={1.6} stroke={color} strokeWidth={1.6} />
+      <Path d="M4 17l4.5-4.5 3.5 3.5 3-3 5 5" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function LinkIcon({ size = 24, color = colors.black }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M9 15l6-6" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
+      <Path d="M11 7l1-1a3.5 3.5 0 015 5l-1 1" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M13 17l-1 1a3.5 3.5 0 01-5-5l1-1" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
 export function Gear({ size = 22, color = colors.black }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">

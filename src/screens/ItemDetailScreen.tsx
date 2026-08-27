@@ -6,7 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { HomeStackParams } from '../navigation/types';
 import { colors, font, space } from '../theme';
 import { Button, Meta } from '../components/ui';
-import { Camera, Check, Close } from '../components/icons';
+import { Check, Close, ImageIcon, LinkIcon } from '../components/icons';
 import { VideoPreview } from '../components/VideoPreview';
 import { useStore, MediaFile } from '../store';
 
@@ -47,13 +47,6 @@ export function ItemDetailScreen({ navigation, route }: Props) {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) return;
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.All, quality: 0.8 });
-    if (!res.canceled && res.assets?.[0]) setCaptured(fromAsset(res.assets[0]));
-  };
-
-  const shootPhoto = async () => {
-    const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) return;
-    const res = await ImagePicker.launchCameraAsync({ quality: 0.8 });
     if (!res.canceled && res.assets?.[0]) setCaptured(fromAsset(res.assets[0]));
   };
 
@@ -121,9 +114,8 @@ export function ItemDetailScreen({ navigation, route }: Props) {
           <>
             <SectionLabel>{isRejected ? 'REPLACE CONTENT' : 'ADD CONTENT'}</SectionLabel>
             <View style={[styles.section, { flexDirection: 'row', gap: 10 }]}>
-              <CaptureCard title="Camera" sub="Shoot now" onPress={shootPhoto} />
-              <CaptureCard title="Photo Library" sub="Choose existing" onPress={pickFromLibrary} />
-              <CaptureCard title="Paste Link" sub="TikTok / IG URL" onPress={() => setShowLink((s) => !s)} />
+              <CaptureCard title="Upload" sub="Photo or video" icon={<ImageIcon size={16} color={colors.black} />} onPress={pickFromLibrary} />
+              <CaptureCard title="Paste Link" sub="TikTok / IG URL" icon={<LinkIcon size={16} color={colors.black} />} onPress={() => setShowLink((s) => !s)} />
             </View>
             {showLink ? (
               <View style={[styles.section, { flexDirection: 'row', gap: 8, alignItems: 'center' }]}>
@@ -191,12 +183,10 @@ export function ItemDetailScreen({ navigation, route }: Props) {
   );
 }
 
-function CaptureCard({ title, sub, onPress }: { title: string; sub: string; onPress: () => void }) {
+function CaptureCard({ title, sub, icon, onPress }: { title: string; sub: string; icon: React.ReactNode; onPress: () => void }) {
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.captureCard, pressed && { backgroundColor: colors.grey50 }]}>
-      <View style={styles.captureIcon}>
-        <Camera size={16} color={colors.black} />
-      </View>
+      <View style={styles.captureIcon}>{icon}</View>
       <Text style={styles.captureTitle}>{title}</Text>
       <Text style={styles.captureSub}>{sub}</Text>
     </Pressable>
