@@ -15,7 +15,7 @@ type Captured = MediaFile & { isVideo: boolean };
 
 export function ItemDetailScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const { activation, uploadAndSubmit, progressOf } = useStore();
+  const { activation, uploadAndSubmit, removeContent, progressOf } = useStore();
   const a = activation(route.params.activationId);
   const item = a?.items.find((i) => i.id === route.params.itemId);
   const [note, setNote] = useState('');
@@ -143,9 +143,21 @@ export function ItemDetailScreen({ navigation, route }: Props) {
               ) : (
                 <Image source={{ uri: displayUri }} style={styles.media} resizeMode="cover" />
               )}
-              <View style={{ marginTop: 8, gap: 2 }}>
-                <Text style={styles.previewTitle} numberOfLines={1}>{displayLabel}</Text>
-                <Text style={styles.previewMeta}>{isApproved ? 'Approved · Live' : captured ? 'Ready to submit' : 'Submitted · in review'}</Text>
+              <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <View style={{ gap: 2, flex: 1 }}>
+                  <Text style={styles.previewTitle} numberOfLines={1}>{displayLabel}</Text>
+                  <Text style={styles.previewMeta}>{isApproved ? 'Approved · Live' : captured ? 'Ready to submit' : 'Submitted · in review'}</Text>
+                </View>
+                {!isApproved ? (
+                  <Pressable
+                    onPress={() => { removeContent(a.id, item.id); setCaptured(null); setNote(''); }}
+                    hitSlop={8}
+                    style={({ pressed }) => [styles.removeBtn, pressed && { opacity: 0.6 }]}
+                  >
+                    <Close size={14} color={colors.red} />
+                    <Text style={styles.removeText}>Remove</Text>
+                  </Pressable>
+                ) : null}
               </View>
             </View>
           </>
@@ -215,6 +227,8 @@ const styles = StyleSheet.create({
   media: { width: '100%', height: 200, borderRadius: 12, backgroundColor: colors.black, overflow: 'hidden' },
   previewTitle: { fontFamily: font.medium, fontSize: 12, color: colors.black },
   previewMeta: { fontFamily: font.mono, fontSize: 10, color: colors.success },
+  removeBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingLeft: 10 },
+  removeText: { fontFamily: font.semibold, fontSize: 13, color: colors.red },
   noteBox: { borderWidth: 1, borderColor: colors.grey100, borderRadius: 10, padding: 14 },
   noteInput: { fontFamily: font.mono, fontSize: 12, color: colors.black, minHeight: 20, padding: 0 },
   approvedBanner: { backgroundColor: colors.black, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 14, gap: 4 },

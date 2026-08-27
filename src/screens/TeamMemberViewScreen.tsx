@@ -59,7 +59,7 @@ export function TeamMemberViewScreen({ navigation, route }: Props) {
             return (
               <Pressable
                 key={a.id}
-                onPress={() => navigation.navigate('TeamActivationDetail', { activation: a, memberName: name })}
+                onPress={() => navigation.navigate('TeamActivationDetail', { activation: a, memberId: route.params.memberId, memberName: name })}
                 style={({ pressed }) => [styles.card, pressed && { backgroundColor: colors.grey50 }]}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>

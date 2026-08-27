@@ -134,6 +134,7 @@ type Store = {
   createActivation: (input: api.NewActivationInput) => Promise<string>;
   submitItem: (activationId: string, itemId: string, caption: string, photoLabel: string, mediaUri?: string) => void;
   uploadAndSubmit: (activationId: string, itemId: string, caption: string, file: MediaFile) => Promise<void>;
+  removeContent: (activationId: string, itemId: string) => void;
   approveItem: (activationId: string, itemId: string) => void;
   rejectItem: (activationId: string, itemId: string, reason: string) => void;
   toggleMyItem: (activationId: string, itemId: string) => void;
@@ -377,6 +378,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         }
         updateItem(activationId, itemId, { state: 'submitted', caption, photoLabel: file.label, mediaUri, rejectReason: undefined });
         if (session) api.submitItemRemote(itemId, caption, file.label, mediaUri).catch((e) => console.warn('[store] submit failed', e));
+      },
+      removeContent: (activationId, itemId) => {
+        const item = activations.find((a) => a.id === activationId)?.items.find((i) => i.id === itemId);
+        const url = item?.mediaUri;
+        updateItem(activationId, itemId, { state: 'todo', mediaUri: undefined, photoLabel: undefined, caption: undefined, rejectReason: undefined });
+        if (session) {
+          api.removeItemRemote(itemId).catch((e) => console.warn('[store] remove failed', e));
+          if (url) api.deleteStorageObject(url).catch((e) => console.warn('[store] storage delete failed', e));
+        }
       },
       approveItem: (activationId, itemId) => {
         updateItem(activationId, itemId, { state: 'approved' });

@@ -157,6 +157,23 @@ export async function uploadContent(uid: string, fileUri: string, ext: string, c
   return data.publicUrl;
 }
 
+// Clear an item's content and reset it to "to do".
+export async function removeItemRemote(itemId: string) {
+  await supabase
+    .from('checklist_items')
+    .update({ state: 'todo', media_url: null, media_label: null, caption: null, reject_reason: null, submitted_at: null, reviewed_at: null })
+    .eq('id', itemId);
+}
+
+// Delete the underlying file from Storage (skips pasted external links).
+export async function deleteStorageObject(mediaUrl: string) {
+  const marker = '/storage/v1/object/public/content/';
+  const idx = mediaUrl.indexOf(marker);
+  if (idx === -1) return;
+  const path = decodeURIComponent(mediaUrl.slice(idx + marker.length));
+  await supabase.storage.from('content').remove([path]);
+}
+
 export async function setItemStateRemote(itemId: string, state: ChecklistItem['state'], rejectReason?: string) {
   const patch: Record<string, unknown> = { state, reviewed_at: new Date().toISOString() };
   if (state === 'rejected') patch.reject_reason = rejectReason ?? '';

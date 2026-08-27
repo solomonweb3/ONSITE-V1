@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, Image, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -7,7 +7,10 @@ import { colors, font, space } from '../theme';
 import { StatusBadge, ProgressBar, IconButton } from '../components/ui';
 import { ChevronLeft, Check } from '../components/icons';
 import { VideoPreview, isVideoLabel } from '../components/VideoPreview';
-import type { ChecklistItem } from '../store';
+import { useStore } from '../store';
+import * as api from '../data/api';
+import { supabase } from '../lib/supabase';
+import type { ChecklistItem, Activation } from '../store';
 
 const activationProgress = (items: ChecklistItem[]) =>
   items.length ? Math.round((items.filter((i) => i.state === 'approved').length / items.length) * 100) : 0;
@@ -60,7 +63,30 @@ function DeliverableCard({ item }: { item: ChecklistItem }) {
 
 export function TeamActivationDetailScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const a = route.params.activation;
+  const { myTeam } = useStore();
+  const [a, setA] = useState<Activation>(route.params.activation);
+
+  // Live sync: reload this activation whenever the member changes its items.
+  useEffect(() => {
+    if (!myTeam) return;
+    const reload = async () => {
+      try {
+        const acts = await api.loadMemberActivations(myTeam.id, route.params.memberId);
+        const fresh = acts.find((x) => x.id === route.params.activation.id);
+        if (fresh) setA(fresh);
+      } catch {
+        /* ignore */
+      }
+    };
+    const channel = supabase
+      .channel(`activation-${route.params.activation.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'checklist_items', filter: `activation_id=eq.${route.params.activation.id}` }, reload)
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [myTeam, route.params.memberId, route.params.activation.id]);
+
   if (!a) return null;
 
   const progress = activationProgress(a.items);
