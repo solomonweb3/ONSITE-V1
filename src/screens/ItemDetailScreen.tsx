@@ -7,6 +7,7 @@ import { HomeStackParams } from '../navigation/types';
 import { colors, font, space } from '../theme';
 import { Button, Meta } from '../components/ui';
 import { Camera, Check, Close } from '../components/icons';
+import { VideoPreview } from '../components/VideoPreview';
 import { useStore, MediaFile } from '../store';
 
 type Props = NativeStackScreenProps<HomeStackParams, 'ItemDetail'>;
@@ -145,18 +146,14 @@ export function ItemDetailScreen({ navigation, route }: Props) {
           <>
             <SectionLabel>{isApproved ? 'DELIVERED' : 'CONTENT'}</SectionLabel>
             <View style={styles.section}>
-              <View style={styles.previewCard}>
-                {!displayVideo ? (
-                  <Image source={{ uri: displayUri }} style={styles.thumb} resizeMode="cover" />
-                ) : (
-                  <View style={[styles.thumb, { alignItems: 'center', justifyContent: 'center' }]}>
-                    <Text style={{ color: colors.white, fontFamily: font.mono, fontSize: 10 }}>▶</Text>
-                  </View>
-                )}
-                <View style={{ flex: 1, gap: 3 }}>
-                  <Text style={styles.previewTitle} numberOfLines={1}>{displayLabel}</Text>
-                  <Text style={styles.previewMeta}>{isApproved ? 'Approved · Live' : captured ? 'Ready to submit' : 'Submitted · in review'}</Text>
-                </View>
+              {displayVideo ? (
+                <VideoPreview uri={displayUri} style={styles.media} />
+              ) : (
+                <Image source={{ uri: displayUri }} style={styles.media} resizeMode="cover" />
+              )}
+              <View style={{ marginTop: 8, gap: 2 }}>
+                <Text style={styles.previewTitle} numberOfLines={1}>{displayLabel}</Text>
+                <Text style={styles.previewMeta}>{isApproved ? 'Approved · Live' : captured ? 'Ready to submit' : 'Submitted · in review'}</Text>
               </View>
             </View>
           </>
@@ -225,8 +222,7 @@ const styles = StyleSheet.create({
   captureTitle: { fontFamily: font.semibold, fontSize: 12, color: colors.black },
   captureSub: { fontFamily: font.mono, fontSize: 9, color: colors.grey600, textAlign: 'center' },
   linkInput: { flex: 1, height: 44, borderWidth: 1.5, borderColor: colors.grey200, borderRadius: 10, paddingHorizontal: 14, fontFamily: font.mono, fontSize: 13, color: colors.black },
-  previewCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.grey50, borderRadius: 12, padding: 14 },
-  thumb: { width: 56, height: 56, borderRadius: 8, backgroundColor: colors.black },
+  media: { width: '100%', height: 200, borderRadius: 12, backgroundColor: colors.black, overflow: 'hidden' },
   previewTitle: { fontFamily: font.medium, fontSize: 12, color: colors.black },
   previewMeta: { fontFamily: font.mono, fontSize: 10, color: colors.success },
   noteBox: { borderWidth: 1, borderColor: colors.grey100, borderRadius: 10, padding: 14 },

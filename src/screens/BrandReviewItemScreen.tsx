@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, Image, Pressable, StyleSheet } from 'react-native';
+import { VideoPreview, isVideoLabel } from '../components/VideoPreview';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { HomeStackParams } from '../navigation/types';
@@ -27,11 +28,13 @@ export function BrandReviewItemScreen({ navigation, route }: Props) {
         </View>
 
         <View style={{ paddingHorizontal: space.screenX, paddingTop: 16, flex: 1 }}>
-          {item.mediaUri && !/\.(mp4|mov|webm)$/i.test(item.photoLabel || '') ? (
+          {item.mediaUri && (isVideoLabel(item.photoLabel) || isVideoLabel(item.mediaUri)) ? (
+            <VideoPreview uri={item.mediaUri} style={styles.preview} />
+          ) : item.mediaUri ? (
             <Image source={{ uri: item.mediaUri }} style={styles.preview} resizeMode="cover" />
           ) : (
             <View style={styles.preview}>
-              <Text style={styles.previewText}>{item.mediaUri ? '▶ VIDEO' : '▶ PREVIEW'}</Text>
+              <Text style={styles.previewText}>▶ PREVIEW</Text>
             </View>
           )}
           {item.caption ? <Text style={styles.caption}>{item.caption}</Text> : null}

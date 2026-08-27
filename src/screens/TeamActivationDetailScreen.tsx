@@ -6,6 +6,7 @@ import { TeamStackParams } from '../navigation/types';
 import { colors, font, space } from '../theme';
 import { StatusBadge, ProgressBar, IconButton } from '../components/ui';
 import { ChevronLeft, Check } from '../components/icons';
+import { VideoPreview, isVideoLabel } from '../components/VideoPreview';
 import type { ChecklistItem } from '../store';
 
 const activationProgress = (items: ChecklistItem[]) =>
@@ -37,16 +38,18 @@ function DeliverableCard({ item }: { item: ChecklistItem }) {
       </Text>
 
       {hasUpload ? (
-        <View style={styles.upload}>
-          {item.mediaUri && !/\.(mp4|mov|webm)$/i.test(item.photoLabel || '') ? (
-            <Image source={{ uri: item.mediaUri }} style={styles.thumb} resizeMode="cover" />
+        <View style={{ gap: 8 }}>
+          {item.mediaUri ? (
+            isVideoLabel(item.photoLabel) || isVideoLabel(item.mediaUri) ? (
+              <VideoPreview uri={item.mediaUri} style={styles.media} />
+            ) : (
+              <Image source={{ uri: item.mediaUri }} style={styles.media} resizeMode="cover" />
+            )
           ) : (
-            <View style={styles.thumb} />
+            <View style={styles.media} />
           )}
-          <View style={{ flex: 1, gap: 3 }}>
-            <Text style={styles.uploadName} numberOfLines={1}>{item.photoLabel}</Text>
-            {item.caption ? <Text style={styles.uploadCaption} numberOfLines={2}>{item.caption}</Text> : null}
-          </View>
+          <Text style={styles.uploadName} numberOfLines={1}>{item.photoLabel}</Text>
+          {item.caption ? <Text style={styles.uploadCaption}>{item.caption}</Text> : null}
         </View>
       ) : (
         <Text style={styles.awaiting}>Awaiting upload from creator</Text>
@@ -120,9 +123,8 @@ const styles = StyleSheet.create({
   cardMeta: { fontFamily: font.mono, fontSize: 11, color: colors.grey600 },
   stateChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.grey100, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20 },
   stateText: { fontFamily: font.monoMedium, fontSize: 10, color: colors.grey600, letterSpacing: 0.2 },
-  upload: { flexDirection: 'row', gap: 12, alignItems: 'center', backgroundColor: colors.grey50, borderRadius: 10, padding: 12 },
-  thumb: { width: 48, height: 48, borderRadius: 8, backgroundColor: colors.black },
-  uploadName: { fontFamily: font.medium, fontSize: 12, color: colors.black },
+  media: { width: '100%', height: 200, borderRadius: 10, backgroundColor: colors.black, overflow: 'hidden' },
+  uploadName: { fontFamily: font.mono, fontSize: 11, color: colors.grey600 },
   uploadCaption: { fontFamily: font.regular, fontSize: 12, color: colors.grey600 },
   awaiting: { fontFamily: font.mono, fontSize: 11, color: colors.grey400 },
 });
