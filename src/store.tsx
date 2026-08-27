@@ -158,6 +158,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [demoMode, setDemoMode] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const roleRef = React.useRef<'creator' | 'team'>('creator');
+  const justLoggedInRef = React.useRef(false);
 
   // Track the real Supabase auth session.
   useEffect(() => {
@@ -194,7 +195,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       const uid = session.user.id;
       try {
-        const profile = await api.hydrateProfile(uid, roleRef.current, session.user.email);
+        // Only stamp the chosen role on a fresh login; keep the persisted role on reload.
+        const fresh = justLoggedInRef.current;
+        justLoggedInRef.current = false;
+        const profile = await api.hydrateProfile(uid, session.user.email, fresh ? roleRef.current : undefined);
         if (!cancelled && profile) {
           setUser((u) => {
             const name = profile.name || u.name;
@@ -300,15 +304,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       signUpWithEmail: async (email, password) => {
         const { data, error } = await supabase.auth.signUp({ email: email.trim(), password });
         if (error) return { error: error.message };
+        if (data.session) justLoggedInRef.current = true;
         // If email confirmation is on, there's no session until they confirm.
         return { needsConfirm: !data.session };
       },
       signInWithEmail: async (email, password) => {
         // Try the real Supabase account first.
         const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-        if (!error) return {};
+        if (!error) {
+          justLoggedInRef.current = true;
+          return {};
+        }
         // Fallback: built-in demo works offline if real auth is unavailable.
         if (email.trim().toLowerCase() === DEMO_EMAIL && password === DEMO_PASSWORD) {
+          justLoggedInRef.current = true;
           setDemoMode(true);
           return {};
         }
@@ -320,6 +329,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
       verifyPhoneCode: async (phone, token) => {
         const { error } = await supabase.auth.verifyOtp({ phone: phone.trim(), token: token.trim(), type: 'sms' });
+        if (!error) justLoggedInRef.current = true;
         return error ? { error: error.message } : {};
       },
       signOut: async () => {

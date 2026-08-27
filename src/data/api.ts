@@ -55,14 +55,16 @@ function mapActivation(r: ActivationRow): Activation {
 
 /* ------------------------------- profile ---------------------------------- */
 
-export async function hydrateProfile(uid: string, role: 'creator' | 'team', email?: string | null) {
-  // Ensure the profile has at least a handle derived from the email.
+// roleToSet is written ONLY on a fresh login (from the chosen path); on a
+// restored session it's undefined so the persisted role is kept.
+export async function hydrateProfile(uid: string, email?: string | null, roleToSet?: 'creator' | 'team') {
   const { data } = await supabase.from('profiles').select('*').eq('id', uid).single();
   const fallbackHandle = email ? '@' + email.split('@')[0] : undefined;
-  const patch: Record<string, unknown> = { role };
+  const patch: Record<string, unknown> = {};
+  if (roleToSet) patch.role = roleToSet;
   if (data && !data.handle && fallbackHandle) patch.handle = fallbackHandle;
   if (data && !data.name && email) patch.name = email.split('@')[0];
-  await supabase.from('profiles').update(patch).eq('id', uid);
+  if (Object.keys(patch).length) await supabase.from('profiles').update(patch).eq('id', uid);
   const { data: fresh } = await supabase.from('profiles').select('*').eq('id', uid).single();
   return fresh;
 }
