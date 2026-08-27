@@ -32,14 +32,14 @@ function Row({ label, value, onPress }: { label: string; value?: string; onPress
 
 export function ProfileScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { user, unreadCount, signOut, activations, progressOf, team, teamName } = useStore();
+  const { user, unreadCount, signOut, activations, progressOf, team, myTeam } = useStore();
 
   // Real stats derived from the user's data.
   const totalItems = activations.reduce((n, a) => n + a.items.length, 0);
   const completion = activations.length
     ? Math.round(activations.reduce((n, a) => n + progressOf(a.id), 0) / activations.length)
     : 0;
-  const isMember = user.role === 'creator';
+  const isMember = user.role === 'creator' && !!myTeam;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.white, paddingTop: insets.top }}>
@@ -77,16 +77,18 @@ export function ProfileScreen({ navigation }: Props) {
             <View style={{ paddingHorizontal: space.screenX, paddingTop: 8 }}>
               <View style={styles.teamCard}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.teamName}>{teamName}</Text>
-                  <Text style={styles.teamMeta}>Member · {team.length + 2} people</Text>
+                  <Text style={styles.teamName}>{myTeam?.name}</Text>
+                  <Text style={styles.teamMeta}>Member</Text>
                 </View>
-                <View style={{ flexDirection: 'row' }}>
-                  {team.slice(0, 3).map((m, i) => (
-                    <View key={m.id} style={[styles.teamAvatar, { marginLeft: i === 0 ? 0 : -8 }]}>
-                      <Text style={styles.teamAvatarText}>{m.initials}</Text>
-                    </View>
-                  ))}
-                </View>
+                {team.length > 0 ? (
+                  <View style={{ flexDirection: 'row' }}>
+                    {team.slice(0, 3).map((m, i) => (
+                      <View key={m.id} style={[styles.teamAvatar, { marginLeft: i === 0 ? 0 : -8 }]}>
+                        <Text style={styles.teamAvatarText}>{m.initials}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
               </View>
             </View>
           </>

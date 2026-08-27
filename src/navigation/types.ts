@@ -26,7 +26,7 @@ export type TeamStackParams = {
   TeamHome: undefined;
   InviteMember: undefined;
   TeamMemberView: { memberId: string };
-  TeamActivationDetail: { activationId: string; memberName: string };
+  TeamActivationDetail: { activation: import('../store').Activation; memberName: string };
   TeamSettings: undefined;
 };
 

@@ -6,8 +6,10 @@ import { TeamStackParams } from '../navigation/types';
 import { colors, font, space } from '../theme';
 import { StatusBadge, ProgressBar, IconButton } from '../components/ui';
 import { ChevronLeft, Check } from '../components/icons';
-import { findMemberActivation, activationProgress } from '../data/teamData';
 import type { ChecklistItem } from '../store';
+
+const activationProgress = (items: ChecklistItem[]) =>
+  items.length ? Math.round((items.filter((i) => i.state === 'approved').length / items.length) * 100) : 0;
 
 type Props = NativeStackScreenProps<TeamStackParams, 'TeamActivationDetail'>;
 
@@ -55,10 +57,10 @@ function DeliverableCard({ item }: { item: ChecklistItem }) {
 
 export function TeamActivationDetailScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const a = findMemberActivation(route.params.activationId);
+  const a = route.params.activation;
   if (!a) return null;
 
-  const progress = activationProgress(a);
+  const progress = activationProgress(a.items);
   const approved = a.items.filter((i) => i.state === 'approved').length;
 
   return (

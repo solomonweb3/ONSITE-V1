@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -6,17 +6,37 @@ import { TeamStackParams } from '../navigation/types';
 import { colors, font, space } from '../theme';
 import { StatusBadge, ProgressBar } from '../components/ui';
 import { ChevronRight } from '../components/icons';
-import { useStore } from '../store';
-import { memberActivationsFor, activationProgress } from '../data/teamData';
+import { useStore, Activation } from '../store';
+import * as api from '../data/api';
 
 type Props = NativeStackScreenProps<TeamStackParams, 'TeamMemberView'>;
 
+const progressOf = (a: Activation) =>
+  a.items.length ? Math.round((a.items.filter((i) => i.state === 'approved').length / a.items.length) * 100) : 0;
+
 export function TeamMemberViewScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const { team } = useStore();
+  const { team, myTeam } = useStore();
   const member = team.find((m) => m.id === route.params.memberId);
   const name = member?.name ?? 'Member';
-  const work = memberActivationsFor(route.params.memberId);
+  const [work, setWork] = useState<Activation[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!myTeam) return;
+      try {
+        const acts = await api.loadMemberActivations(myTeam.id, route.params.memberId);
+        if (!cancelled) setWork(acts);
+      } catch {
+        /* ignore */
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [myTeam, route.params.memberId]);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.white, paddingTop: insets.top }}>
@@ -30,13 +50,16 @@ export function TeamMemberViewScreen({ navigation, route }: Props) {
         </View>
 
         <View style={{ paddingHorizontal: space.screenX, paddingTop: 12, gap: 12 }}>
+          {!loading && work.length === 0 ? (
+            <Text style={styles.note}>{name} has no activations yet.</Text>
+          ) : null}
           {work.map((a) => {
-            const progress = activationProgress(a);
+            const progress = progressOf(a);
             const approved = a.items.filter((i) => i.state === 'approved').length;
             return (
               <Pressable
                 key={a.id}
-                onPress={() => navigation.navigate('TeamActivationDetail', { activationId: a.id, memberName: name })}
+                onPress={() => navigation.navigate('TeamActivationDetail', { activation: a, memberName: name })}
                 style={({ pressed }) => [styles.card, pressed && { backgroundColor: colors.grey50 }]}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>

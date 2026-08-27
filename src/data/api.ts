@@ -110,10 +110,10 @@ export type NewActivationInput = {
   items: { title: string; owner: 'client' | 'my'; due: string }[];
 };
 
-export async function createActivationRemote(uid: string, input: NewActivationInput): Promise<Activation> {
+export async function createActivationRemote(uid: string, input: NewActivationInput, teamId?: string | null): Promise<Activation> {
   const { data: act, error } = await supabase
     .from('activations')
-    .insert({ creator_id: uid, title: input.title, subtitle: input.subtitle, status: statusToDb[input.status] ?? 'live' })
+    .insert({ creator_id: uid, team_id: teamId ?? null, title: input.title, subtitle: input.subtitle, status: statusToDb[input.status] ?? 'live' })
     .select('id')
     .single();
   if (error || !act) throw error;
@@ -203,12 +203,88 @@ export async function markAllReadRemote(uid: string) {
 
 export type InviteRow = { id: string; name: string; email: string; code: string };
 
-// Provision a real member login via the admin Edge Function.
-export async function inviteMemberRemote(name: string, email: string): Promise<{ email: string; tempPassword: string }> {
-  const { data, error } = await supabase.functions.invoke('invite-member', { body: { email, name } });
+// Provision a real member login via the admin Edge Function, linked to a team.
+export async function inviteMemberRemote(name: string, email: string, teamId?: string | null): Promise<{ email: string; tempPassword: string }> {
+  const { data, error } = await supabase.functions.invoke('invite-member', { body: { email, name, teamId } });
   if (error) throw new Error(error.message);
   if (data?.error) throw new Error(data.error);
   return { email: data.email, tempPassword: data.tempPassword };
+}
+
+/* ---------------------------------- teams --------------------------------- */
+
+export type Team = { id: string; name: string };
+export type RosterMember = { id: string; name: string; initials: string; liveActivations: number };
+
+function initials(name: string) {
+  return name.trim().split(/\s+/).map((p) => p[0]?.toUpperCase() ?? '').slice(0, 2).join('') || '?';
+}
+
+// Ensure the owner has a team; create one on first login. Returns it.
+export async function ensureOwnerTeam(uid: string, ownerName: string): Promise<Team> {
+  const { data: existing } = await supabase.from('teams').select('id, name').eq('owner_id', uid).limit(1).maybeSingle();
+  if (existing) return existing as Team;
+  const code = Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[b % 32]).join('');
+  const name = ownerName ? `${ownerName}'s Team` : 'My Team';
+  const { data, error } = await supabase.from('teams').insert({ owner_id: uid, name, join_code: code }).select('id, name').single();
+  if (error || !data) throw error;
+  return data as Team;
+}
+
+// The team a member belongs to (via team_members), or null.
+export async function loadMemberTeam(uid: string): Promise<Team | null> {
+  const { data } = await supabase
+    .from('team_members')
+    .select('teams(id, name)')
+    .eq('profile_id', uid)
+    .eq('status', 'approved')
+    .limit(1)
+    .maybeSingle();
+  const t = (data as { teams?: Team } | null)?.teams;
+  return t ?? null;
+}
+
+export async function updateTeamName(teamId: string, name: string) {
+  await supabase.from('teams').update({ name }).eq('id', teamId);
+}
+
+// Real roster: approved members of a team, with each member's live count.
+export async function loadRoster(teamId: string): Promise<{ approved: RosterMember[]; pending: RosterMember[] }> {
+  const { data } = await supabase
+    .from('team_members')
+    .select('status, profiles(id, name)')
+    .eq('team_id', teamId);
+  const rows = (data as { status: string; profiles: { id: string; name: string | null } | null }[] | null) ?? [];
+  const toMember = async (p: { id: string; name: string | null }): Promise<RosterMember> => {
+    const { count } = await supabase
+      .from('activations')
+      .select('id', { count: 'exact', head: true })
+      .eq('creator_id', p.id)
+      .eq('team_id', teamId)
+      .eq('status', 'live');
+    const name = p.name || 'Member';
+    return { id: p.id, name, initials: initials(name), liveActivations: count ?? 0 };
+  };
+  const approved: RosterMember[] = [];
+  const pending: RosterMember[] = [];
+  for (const r of rows) {
+    if (!r.profiles) continue;
+    const m = await toMember(r.profiles);
+    (r.status === 'approved' ? approved : pending).push(m);
+  }
+  return { approved, pending };
+}
+
+// Owner reads one member's activations for this team (allowed by RLS team_read).
+export async function loadMemberActivations(teamId: string, memberId: string): Promise<Activation[]> {
+  const { data, error } = await supabase
+    .from('activations')
+    .select('id, title, subtitle, status, checklist_items(id, title, owner, due_label, state, caption, media_label, media_url, reject_reason, position)')
+    .eq('creator_id', memberId)
+    .eq('team_id', teamId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data as ActivationRow[]).map(mapActivation);
 }
 
 export async function loadInvites(uid: string): Promise<InviteRow[]> {

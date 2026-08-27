@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TextInput, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { TeamStackParams } from '../navigation/types';
@@ -21,7 +21,15 @@ function Row({ label, value, danger, onPress }: { label: string; value?: string;
 
 export function TeamSettingsScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { teamName, signOut } = useStore();
+  const { teamName, myTeam, renameTeam, signOut } = useStore();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(teamName);
+
+  const saveName = () => {
+    const n = draft.trim();
+    if (n && n !== teamName) renameTeam(n);
+    setEditing(false);
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.white, paddingTop: insets.top }}>
@@ -34,7 +42,23 @@ export function TeamSettingsScreen({ navigation }: Props) {
         <Text style={styles.title}>Team Settings</Text>
       </View>
       <ScrollView contentContainerStyle={{ paddingHorizontal: space.screenX, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-        <Row label="Team name" value={teamName} />
+        {editing ? (
+          <View style={styles.row}>
+            <Text style={styles.label}>Team name</Text>
+            <TextInput
+              value={draft}
+              onChangeText={setDraft}
+              autoFocus
+              onSubmitEditing={saveName}
+              onBlur={saveName}
+              style={styles.editInput}
+              placeholder="Team name"
+              placeholderTextColor={colors.grey400}
+            />
+          </View>
+        ) : (
+          <Row label="Team name" value={myTeam ? `${teamName}  ✎` : teamName} onPress={myTeam ? () => { setDraft(teamName); setEditing(true); } : undefined} />
+        )}
         <Row label="Team photo" value="Edit →" onPress={() => {}} />
         <Row label="Change password" onPress={() => {}} />
         <Row label="Manage subscription" value="Active" onPress={() => {}} />
@@ -50,4 +74,5 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.grey100 },
   label: { fontFamily: font.regular, fontSize: 14, color: colors.black },
   value: { fontFamily: font.mono, fontSize: 12, color: colors.grey600 },
+  editInput: { fontFamily: font.regular, fontSize: 14, color: colors.black, textAlign: 'right', minWidth: 160, padding: 0 },
 });

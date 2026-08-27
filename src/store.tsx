@@ -113,6 +113,7 @@ type Store = {
   pending: PendingRequest[];
   invites: Invite[];
   teamName: string;
+  myTeam: { id: string; name: string } | null;
   authed: boolean;
   authLoading: boolean;
   // derived
@@ -140,6 +141,7 @@ type Store = {
   resolveRequest: (id: string) => void;
   inviteMember: (name: string, email: string) => Promise<Invite>;
   revokeInvite: (id: string) => void;
+  renameTeam: (name: string) => Promise<void>;
 };
 
 const Ctx = createContext<Store | null>(null);
@@ -148,8 +150,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User>(seedUser);
   const [activations, setActivations] = useState<Activation[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [team] = useState<TeamMember[]>(seedTeam);
-  const [pending, setPending] = useState<PendingRequest[]>(seedPending);
+  const [team, setTeam] = useState<TeamMember[]>([]);
+  const [pending, setPending] = useState<PendingRequest[]>([]);
+  const [myTeam, setMyTeam] = useState<{ id: string; name: string } | null>(null);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [session, setSession] = useState<Session | null>(null);
   const [demoMode, setDemoMode] = useState(false);
@@ -170,15 +173,21 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   // user's activations + notifications from Supabase. On sign-out, clear.
   useEffect(() => {
     if (demoMode && !session) {
-      // Offline fallback — start empty like any new account.
+      // Offline fallback — start empty, mock team for the demo showcase.
       setActivations([]);
       setNotifications([]);
       setUser((u) => ({ ...u, role: roleRef.current }));
+      setMyTeam({ id: 'demo', name: TEAM_NAME });
+      setTeam(roleRef.current === 'team' ? seedTeam : []);
+      setPending(roleRef.current === 'team' ? seedPending : []);
       return;
     }
     if (!session) {
       setActivations([]);
       setNotifications([]);
+      setMyTeam(null);
+      setTeam([]);
+      setPending([]);
       return;
     }
     let cancelled = false;
@@ -210,6 +219,29 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           if (!cancelled) setInvites(invs);
         } catch {
           // invites table may not exist yet — ignore
+        }
+        // Real team membership.
+        try {
+          const effectiveRole = (profile?.role as 'creator' | 'team') || roleRef.current;
+          const ownerName = profile?.name || session.user.email?.split('@')[0] || '';
+          if (effectiveRole === 'team') {
+            const t = await api.ensureOwnerTeam(uid, ownerName);
+            if (!cancelled) setMyTeam(t);
+            const { approved, pending: pend } = await api.loadRoster(t.id);
+            if (!cancelled) {
+              setTeam(approved);
+              setPending(pend.map((p) => ({ id: p.id, name: p.name, initials: p.initials })));
+            }
+          } else {
+            const t = await api.loadMemberTeam(uid);
+            if (!cancelled) {
+              setMyTeam(t);
+              setTeam([]);
+              setPending([]);
+            }
+          }
+        } catch (e) {
+          console.warn('[store] team load failed', e);
         }
       } catch (e) {
         console.warn('[store] data load failed', e);
@@ -252,7 +284,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       team,
       pending,
       invites,
-      teamName: TEAM_NAME,
+      teamName: myTeam?.name ?? TEAM_NAME,
+      myTeam,
       authed,
       authLoading,
       liveCount: activations.filter((a) => a.status === 'Live').length,
@@ -299,7 +332,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
       createActivation: async (input) => {
         if (session) {
-          const created = await api.createActivationRemote(session.user.id, input);
+          // Link to the member's team so team owners can see it (via RLS).
+          const created = await api.createActivationRemote(session.user.id, input, myTeam?.id);
           setActivations((prev) => [created, ...prev]);
           return created.id;
         }
@@ -358,11 +392,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
       resolveRequest: (id) => setPending((prev) => prev.filter((p) => p.id !== id)),
       inviteMember: async (name, email) => {
-        // Live: provision a real member login via the Edge Function.
+        // Live: provision a real member login, linked to this owner's team.
         if (session) {
-          const res = await api.inviteMemberRemote(name.trim(), email.trim());
+          const res = await api.inviteMemberRemote(name.trim(), email.trim(), myTeam?.id);
           const invite: Invite = { id: 'inv-' + Date.now(), name: name.trim(), email: res.email, code: res.tempPassword };
           setInvites((prev) => [invite, ...prev]);
+          // Refresh the roster so the new member appears.
+          if (myTeam) {
+            api.loadRoster(myTeam.id).then(({ approved }) => setTeam(approved)).catch(() => {});
+          }
           return invite;
         }
         // Demo: local invite code.
@@ -371,8 +409,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         return invite;
       },
       revokeInvite: (id) => setInvites((prev) => prev.filter((i) => i.id !== id)),
+      renameTeam: async (name) => {
+        if (!myTeam) return;
+        setMyTeam({ ...myTeam, name });
+        if (session) await api.updateTeamName(myTeam.id, name).catch(() => {});
+      },
     }),
-    [user, activations, notifications, team, pending, invites, authed, authLoading, session, demoMode, uid, progressOf, updateItem],
+    [user, activations, notifications, team, pending, invites, myTeam, authed, authLoading, session, demoMode, uid, progressOf, updateItem],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -25,7 +25,7 @@ export function TeamHomeScreen({ navigation }: Props) {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
         <View style={{ paddingHorizontal: space.screenX, paddingTop: 8 }}>
           <Text style={styles.title}>{teamName}</Text>
-          <Text style={styles.kicker}>TEAM · {team.length + 2} APPROVED MEMBERS</Text>
+          <Text style={styles.kicker}>TEAM · {team.length} {team.length === 1 ? 'MEMBER' : 'MEMBERS'}</Text>
         </View>
 
         <View style={{ paddingHorizontal: space.screenX, paddingTop: 16 }}>
@@ -80,23 +80,27 @@ export function TeamHomeScreen({ navigation }: Props) {
           <Text style={styles.section}>ROSTER</Text>
         </View>
         <View style={{ paddingHorizontal: space.screenX, paddingTop: 4 }}>
-          {team.map((m) => (
-            <Pressable
-              key={m.id}
-              onPress={() => navigation.navigate('TeamMemberView', { memberId: m.id })}
-              style={({ pressed }) => [styles.memberRow, pressed && { backgroundColor: colors.grey50 }]}
-            >
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{m.initials}</Text>
-              </View>
-              <View style={{ gap: 2 }}>
-                <Text style={styles.memberName}>{m.name}</Text>
-                <Text style={styles.memberMeta}>
-                  {m.liveActivations} live activation{m.liveActivations === 1 ? '' : 's'}
-                </Text>
-              </View>
-            </Pressable>
-          ))}
+          {team.length === 0 ? (
+            <Text style={styles.emptyRoster}>No members yet — invite someone to get started.</Text>
+          ) : (
+            team.map((m) => (
+              <Pressable
+                key={m.id}
+                onPress={() => navigation.navigate('TeamMemberView', { memberId: m.id })}
+                style={({ pressed }) => [styles.memberRow, pressed && { backgroundColor: colors.grey50 }]}
+              >
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>{m.initials}</Text>
+                </View>
+                <View style={{ gap: 2 }}>
+                  <Text style={styles.memberName}>{m.name}</Text>
+                  <Text style={styles.memberMeta}>
+                    {m.liveActivations} live activation{m.liveActivations === 1 ? '' : 's'}
+                  </Text>
+                </View>
+              </Pressable>
+            ))
+          )}
         </View>
       </ScrollView>
     </View>
@@ -118,4 +122,5 @@ const styles = StyleSheet.create({
   avatarText: { fontFamily: font.semibold, fontSize: 12, color: colors.grey600 },
   memberName: { fontFamily: font.medium, fontSize: 14, color: colors.black },
   memberMeta: { fontFamily: font.mono, fontSize: 11, color: colors.grey600 },
+  emptyRoster: { fontFamily: font.regular, fontSize: 13, color: colors.grey600, paddingVertical: 12 },
 });
