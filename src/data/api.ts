@@ -26,6 +26,8 @@ type ActivationRow = {
   title: string;
   subtitle: string | null;
   status: string;
+  source?: string | null;
+  is_draft?: boolean | null;
   checklist_items: ItemRow[];
 };
 
@@ -49,6 +51,8 @@ function mapActivation(r: ActivationRow): Activation {
     title: r.title,
     subtitle: r.subtitle ?? '',
     status: statusFromDb[r.status] ?? 'Live',
+    source: (r.source as 'manual' | 'email') ?? 'manual',
+    isDraft: r.is_draft ?? false,
     items: (r.checklist_items ?? []).slice().sort((a, b) => a.position - b.position).map(mapItem),
   };
 }
@@ -74,7 +78,7 @@ export async function hydrateProfile(uid: string, email?: string | null, roleToS
 export async function loadActivations(uid: string): Promise<Activation[]> {
   const { data, error } = await supabase
     .from('activations')
-    .select('id, title, subtitle, status, checklist_items(id, title, owner, due_label, state, caption, media_label, media_url, reject_reason, position)')
+    .select('id, title, subtitle, status, source, is_draft, checklist_items(id, title, owner, due_label, state, caption, media_label, media_url, reject_reason, position)')
     .eq('creator_id', uid)
     .order('created_at', { ascending: true });
   if (error) throw error;
@@ -298,9 +302,10 @@ export async function loadRoster(teamId: string): Promise<{ approved: RosterMemb
 export async function loadMemberActivations(teamId: string, memberId: string): Promise<Activation[]> {
   const { data, error } = await supabase
     .from('activations')
-    .select('id, title, subtitle, status, checklist_items(id, title, owner, due_label, state, caption, media_label, media_url, reject_reason, position)')
+    .select('id, title, subtitle, status, source, is_draft, checklist_items(id, title, owner, due_label, state, caption, media_label, media_url, reject_reason, position)')
     .eq('creator_id', memberId)
     .eq('team_id', teamId)
+    .eq('is_draft', false) // owners only see confirmed activations, not email suggestions
     .order('created_at', { ascending: true });
   if (error) throw error;
   return (data as ActivationRow[]).map(mapActivation);
@@ -309,6 +314,81 @@ export async function loadMemberActivations(teamId: string, memberId: string): P
 export async function loadInvites(uid: string): Promise<InviteRow[]> {
   const { data } = await supabase.from('invites').select('id, name, email, code').eq('inviter_id', uid).order('created_at', { ascending: false });
   return (data ?? []).map((r: { id: string; name: string | null; email: string; code: string }) => ({ id: r.id, name: r.name ?? '', email: r.email, code: r.code }));
+}
+
+/* --------------------------- email connections ---------------------------- */
+
+export type EmailConnection = {
+  provider: string;
+  email: string | null;
+  lastSyncedAt: string | null;
+};
+
+// Kick off the Google consent flow. The user is already logged in (provisioned
+// email/password), so we LINK a Google identity rather than sign in with it.
+// access_type=offline + prompt=consent are required to get a refresh token.
+export async function connectGmail(redirectTo: string) {
+  const { data, error } = await supabase.auth.linkIdentity({
+    provider: 'google',
+    options: {
+      scopes: 'https://www.googleapis.com/auth/gmail.readonly',
+      redirectTo,
+      queryParams: { access_type: 'offline', prompt: 'consent' },
+    },
+  });
+  if (error) throw error;
+  return data; // { url } — the browser redirects here
+}
+
+// After the OAuth redirect the session carries provider tokens exactly once.
+// Persist them so the gmail-sync Edge Function can pull email later.
+export async function saveEmailConnection(
+  uid: string,
+  conn: { provider: string; email: string | null; refreshToken?: string | null; accessToken?: string | null; expiresIn?: number | null },
+) {
+  const patch: Record<string, unknown> = {
+    profile_id: uid,
+    provider: conn.provider,
+    email: conn.email,
+    access_token: conn.accessToken ?? null,
+    token_expiry: conn.expiresIn ? new Date(Date.now() + conn.expiresIn * 1000).toISOString() : null,
+  };
+  // Only overwrite the refresh token when Google actually returns a new one
+  // (it's only sent on first consent), so a re-link never nulls a good token.
+  if (conn.refreshToken) patch.refresh_token = conn.refreshToken;
+  await supabase.from('email_connections').upsert(patch, { onConflict: 'profile_id,provider' });
+}
+
+export async function loadEmailConnection(uid: string): Promise<EmailConnection | null> {
+  const { data } = await supabase
+    .from('email_connections')
+    .select('provider, email, last_synced_at')
+    .eq('profile_id', uid)
+    .maybeSingle();
+  if (!data) return null;
+  return { provider: data.provider, email: data.email, lastSyncedAt: data.last_synced_at };
+}
+
+export async function disconnectEmail(uid: string, provider = 'google') {
+  await supabase.from('email_connections').delete().eq('profile_id', uid).eq('provider', provider);
+}
+
+// Ask the gmail-sync Edge Function to scan recent email into draft activations.
+export async function syncEmailRemote(): Promise<{ scanned: number; created: number }> {
+  const { data, error } = await supabase.functions.invoke('gmail-sync', { body: {} });
+  if (error) throw new Error(error.message);
+  if (data?.error) throw new Error(data.error);
+  return { scanned: data.scanned ?? 0, created: data.created ?? 0 };
+}
+
+// Turn an email draft into a real activation.
+export async function confirmDraftRemote(activationId: string) {
+  await supabase.from('activations').update({ is_draft: false }).eq('id', activationId);
+}
+
+// Discard a draft (or delete any activation the user owns).
+export async function deleteActivationRemote(activationId: string) {
+  await supabase.from('activations').delete().eq('id', activationId);
 }
 
 /* ------------------------------ bootstrap --------------------------------- */

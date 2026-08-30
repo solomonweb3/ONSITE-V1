@@ -34,6 +34,8 @@ export type Activation = {
   subtitle: string;
   status: BadgeStatus;
   items: ChecklistItem[];
+  source?: 'manual' | 'email';
+  isDraft?: boolean;
 };
 
 export type AppNotification = {
@@ -114,6 +116,7 @@ type Store = {
   invites: Invite[];
   teamName: string;
   myTeam: { id: string; name: string } | null;
+  emailConnection: api.EmailConnection | null;
   authed: boolean;
   authLoading: boolean;
   // derived
@@ -143,6 +146,12 @@ type Store = {
   inviteMember: (name: string, email: string) => Promise<Invite>;
   revokeInvite: (id: string) => void;
   renameTeam: (name: string) => Promise<void>;
+  connectEmail: () => Promise<AuthResult>;
+  disconnectEmail: () => Promise<void>;
+  drafts: Activation[];
+  syncEmail: () => Promise<{ scanned: number; created: number }>;
+  confirmDraft: (activationId: string) => Promise<void>;
+  dismissDraft: (activationId: string) => Promise<void>;
 };
 
 const Ctx = createContext<Store | null>(null);
@@ -155,6 +164,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [pending, setPending] = useState<PendingRequest[]>([]);
   const [myTeam, setMyTeam] = useState<{ id: string; name: string } | null>(null);
   const [invites, setInvites] = useState<Invite[]>([]);
+  const [emailConnection, setEmailConnection] = useState<api.EmailConnection | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [demoMode, setDemoMode] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
@@ -167,7 +177,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setSession(data.session);
       setAuthLoading(false);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s);
+      // Right after the Google consent redirect the session carries the
+      // provider refresh token exactly once — persist it for gmail-sync.
+      const refresh = (s as { provider_refresh_token?: string } | null)?.provider_refresh_token;
+      if (s && refresh) {
+        const googleEmail =
+          s.user.identities?.find((i) => i.provider === 'google')?.identity_data?.email ?? s.user.email ?? null;
+        const accessToken = (s as { provider_token?: string }).provider_token ?? null;
+        api
+          .saveEmailConnection(s.user.id, { provider: 'google', email: googleEmail, refreshToken: refresh, accessToken })
+          .then(() => api.loadEmailConnection(s.user.id))
+          .then((c) => setEmailConnection(c))
+          .catch((e) => console.warn('[store] save email connection failed', e));
+      }
+    });
     return () => sub.subscription.unsubscribe();
   }, []);
 
@@ -190,6 +215,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setMyTeam(null);
       setTeam([]);
       setPending([]);
+      setEmailConnection(null);
       return;
     }
     let cancelled = false;
@@ -224,6 +250,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           if (!cancelled) setInvites(invs);
         } catch {
           // invites table may not exist yet — ignore
+        }
+        try {
+          const conn = await api.loadEmailConnection(uid);
+          if (!cancelled) setEmailConnection(conn);
+        } catch {
+          // email_connections table may not exist yet — ignore
         }
         // Real team membership.
         try {
@@ -291,10 +323,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       invites,
       teamName: myTeam?.name ?? TEAM_NAME,
       myTeam,
+      emailConnection,
       authed,
       authLoading,
-      liveCount: activations.filter((a) => a.status === 'Live').length,
-      completedCount: activations.filter((a) => a.status === 'Completed' || a.status === 'Paid').length,
+      liveCount: activations.filter((a) => a.status === 'Live' && !a.isDraft).length,
+      completedCount: activations.filter((a) => (a.status === 'Completed' || a.status === 'Paid') && !a.isDraft).length,
+      drafts: activations.filter((a) => a.isDraft),
       unreadCount: notifications.filter((n) => n.unread).length,
       progressOf,
       activation: (id: string) => activations.find((a) => a.id === id),
@@ -434,8 +468,41 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setMyTeam({ ...myTeam, name });
         if (session) await api.updateTeamName(myTeam.id, name).catch(() => {});
       },
+      connectEmail: async () => {
+        if (!session) return { error: 'Sign in first to link your email.' };
+        try {
+          const redirectTo = typeof window !== 'undefined' ? window.location.origin : undefined;
+          await api.connectGmail(redirectTo ?? '');
+          // On web this redirects the page to Google; the connection is saved
+          // when we return (handled in onAuthStateChange).
+          return {};
+        } catch (e) {
+          return { error: e instanceof Error ? e.message : 'Could not start Google sign-in.' };
+        }
+      },
+      disconnectEmail: async () => {
+        if (session) await api.disconnectEmail(session.user.id).catch(() => {});
+        setEmailConnection(null);
+      },
+      syncEmail: async () => {
+        const res = await api.syncEmailRemote();
+        if (session && res.created > 0) {
+          // Reload so the new drafts show up in the Suggested section.
+          const acts = await api.loadActivations(session.user.id);
+          setActivations(acts);
+        }
+        return res;
+      },
+      confirmDraft: async (activationId) => {
+        setActivations((prev) => prev.map((a) => (a.id === activationId ? { ...a, isDraft: false } : a)));
+        if (session) await api.confirmDraftRemote(activationId).catch((e) => console.warn('[store] confirm failed', e));
+      },
+      dismissDraft: async (activationId) => {
+        setActivations((prev) => prev.filter((a) => a.id !== activationId));
+        if (session) await api.deleteActivationRemote(activationId).catch((e) => console.warn('[store] dismiss failed', e));
+      },
     }),
-    [user, activations, notifications, team, pending, invites, myTeam, authed, authLoading, session, demoMode, uid, progressOf, updateItem],
+    [user, activations, notifications, team, pending, invites, myTeam, emailConnection, authed, authLoading, session, demoMode, uid, progressOf, updateItem],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

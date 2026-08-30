@@ -21,7 +21,19 @@ function Row({ label, value, danger, onPress }: { label: string; value?: string;
 
 export function AccountScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { user, signOut } = useStore();
+  const { user, signOut, emailConnection, connectEmail, disconnectEmail } = useStore();
+  const [busy, setBusy] = React.useState(false);
+
+  const onEmailPress = async () => {
+    if (emailConnection) {
+      await disconnectEmail();
+      return;
+    }
+    setBusy(true);
+    const res = await connectEmail();
+    setBusy(false);
+    if (res.error) window.alert?.(res.error);
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.white, paddingTop: insets.top }}>
@@ -37,7 +49,11 @@ export function AccountScreen({ navigation }: Props) {
         <Row label="Name" value={user.name} />
         <Row label="Handle" value={user.handle} />
         <Row label="Phone number" value="•••• 4821" />
-        <Row label="Connect Gmail / Outlook" value="Not linked" onPress={() => {}} />
+        <Row
+          label={emailConnection ? 'Email linked' : 'Connect Gmail / Outlook'}
+          value={busy ? 'Connecting…' : emailConnection ? emailConnection.email ?? 'Linked · tap to disconnect' : 'Not linked'}
+          onPress={onEmailPress}
+        />
         <Row label="Subscription" value="Active" />
         <Row label="Join a team" onPress={() => {}} />
         <Row label="Log out" danger onPress={signOut} />

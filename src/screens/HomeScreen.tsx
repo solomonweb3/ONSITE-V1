@@ -13,8 +13,30 @@ type Props = NativeStackScreenProps<HomeStackParams, 'Home'>;
 
 export function HomeScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { activations, progressOf, liveCount, completedCount } = useStore();
-  const empty = activations.length === 0;
+  const { activations, drafts, progressOf, liveCount, completedCount, emailConnection, connectEmail, syncEmail, confirmDraft, dismissDraft } = useStore();
+  const confirmed = activations.filter((a) => !a.isDraft);
+  const empty = confirmed.length === 0 && drafts.length === 0;
+  const [linking, setLinking] = React.useState(false);
+  const [syncing, setSyncing] = React.useState(false);
+
+  const onLinkEmail = async () => {
+    setLinking(true);
+    const res = await connectEmail();
+    setLinking(false);
+    if (res.error) window.alert?.(res.error);
+  };
+
+  const onSync = async () => {
+    setSyncing(true);
+    try {
+      const { created } = await syncEmail();
+      if (created === 0) window.alert?.('No new brand emails found.');
+    } catch (e) {
+      window.alert?.(e instanceof Error ? e.message : 'Sync failed.');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.white, paddingTop: insets.top }}>
@@ -36,20 +58,54 @@ export function HomeScreen({ navigation }: Props) {
           </Text>
           <View style={{ width: '100%', gap: 10, marginTop: 24 }}>
             <Button label="Create Activation" onPress={() => navigation.navigate('NewActivation')} />
-            <Button label="Link Email" variant="secondary" onPress={() => {}} />
+            <Button
+              label={emailConnection ? 'Email Linked ✓' : linking ? 'Connecting…' : 'Link Email'}
+              variant="secondary"
+              onPress={onLinkEmail}
+              disabled={!!emailConnection || linking}
+            />
           </View>
-          <Text style={styles.emptyHint}>Email linking is coming soon.</Text>
+          <Text style={styles.emptyHint}>
+            {emailConnection ? `Linked to ${emailConnection.email ?? 'your inbox'}.` : 'Connect Gmail to auto-suggest activations from brand emails.'}
+          </Text>
         </View>
       ) : (
         <>
           <View style={styles.metaRow}>
-            <Meta>{`${liveCount} LIVE  ·  ${completedCount} COMPLETED THIS MONTH`}</Meta>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Meta>{`${liveCount} LIVE  ·  ${completedCount} COMPLETED THIS MONTH`}</Meta>
+              {emailConnection ? (
+                <Pressable onPress={onSync} disabled={syncing} hitSlop={8}>
+                  <Text style={styles.syncLink}>{syncing ? 'Syncing…' : '↻ Sync email'}</Text>
+                </Pressable>
+              ) : null}
+            </View>
           </View>
           <ScrollView
             contentContainerStyle={{ paddingHorizontal: space.screenX, paddingBottom: 32, gap: 12 }}
             showsVerticalScrollIndicator={false}
           >
-            {activations.map((a) => (
+            {drafts.length > 0 ? (
+              <View style={{ gap: 10 }}>
+                <Meta style={{ color: colors.grey600 }}>SUGGESTED FROM EMAIL</Meta>
+                {drafts.map((d) => (
+                  <View key={d.id} style={styles.draftCard}>
+                    <Text style={styles.draftTitle} numberOfLines={2}>{d.title}</Text>
+                    <Text style={styles.draftSub} numberOfLines={1}>From {d.subtitle || 'a brand email'}</Text>
+                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                      <Pressable onPress={() => confirmDraft(d.id)} style={styles.draftConfirm}>
+                        <Text style={styles.draftConfirmText}>Add activation</Text>
+                      </Pressable>
+                      <Pressable onPress={() => dismissDraft(d.id)} style={styles.draftDismiss}>
+                        <Text style={styles.draftDismissText}>Dismiss</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ))}
+                <View style={{ height: 4 }} />
+              </View>
+            ) : null}
+            {confirmed.map((a) => (
               <ActivationCard
                 key={a.id}
                 activation={a}
@@ -90,4 +146,12 @@ const styles = StyleSheet.create({
   emptyTitle: { fontFamily: font.bold, fontSize: 18, color: colors.black, marginBottom: 8 },
   emptyBody: { fontFamily: font.regular, fontSize: 14, color: colors.grey600, textAlign: 'center', lineHeight: 20 },
   emptyHint: { fontFamily: font.mono, fontSize: 11, color: colors.grey400, marginTop: 14 },
+  syncLink: { fontFamily: font.mono, fontSize: 11, color: colors.black, letterSpacing: 0.2 },
+  draftCard: { borderWidth: 1, borderColor: colors.grey200, borderRadius: 12, padding: 14, backgroundColor: colors.grey50 },
+  draftTitle: { fontFamily: font.semibold, fontSize: 14, color: colors.black },
+  draftSub: { fontFamily: font.mono, fontSize: 11, color: colors.grey600, marginTop: 2 },
+  draftConfirm: { backgroundColor: colors.black, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
+  draftConfirmText: { fontFamily: font.semibold, fontSize: 12, color: colors.white },
+  draftDismiss: { borderWidth: 1, borderColor: colors.grey300, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
+  draftDismissText: { fontFamily: font.semibold, fontSize: 12, color: colors.grey600 },
 });
