@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+import { File } from 'expo-file-system';
 import { supabase } from '../lib/supabase';
 import { SEED_ACTIVATIONS, SEED_NOTIFICATIONS } from './seeds';
 import type { Activation, ChecklistItem, AppNotification } from '../store';
@@ -151,11 +153,12 @@ export async function submitItemRemote(itemId: string, caption: string, mediaLab
 }
 
 // Upload a captured file to the "content" Storage bucket, return its public URL.
+// Web can fetch the blob URL directly; native reads the file:// uri as bytes.
 export async function uploadContent(uid: string, fileUri: string, ext: string, contentType: string): Promise<string> {
   const path = `${uid}/${Date.now()}.${ext}`;
-  const res = await fetch(fileUri);
-  const blob = await res.blob();
-  const { error } = await supabase.storage.from('content').upload(path, blob, { contentType, upsert: true });
+  const body: Blob | ArrayBuffer =
+    Platform.OS === 'web' ? await (await fetch(fileUri)).blob() : await new File(fileUri).arrayBuffer();
+  const { error } = await supabase.storage.from('content').upload(path, body, { contentType, upsert: true });
   if (error) throw error;
   const { data } = supabase.storage.from('content').getPublicUrl(path);
   return data.publicUrl;
@@ -327,17 +330,26 @@ export type EmailConnection = {
 // Kick off the Google consent flow. The user is already logged in (provisioned
 // email/password), so we LINK a Google identity rather than sign in with it.
 // access_type=offline + prompt=consent are required to get a refresh token.
-export async function connectGmail(redirectTo: string) {
+// On web, skipRedirect=false lets Supabase redirect the page; on native we take
+// the returned url and open it in an in-app browser ourselves.
+export async function startGmailOAuth(redirectTo: string, skipRedirect: boolean) {
   const { data, error } = await supabase.auth.linkIdentity({
     provider: 'google',
     options: {
       scopes: 'https://www.googleapis.com/auth/gmail.readonly',
       redirectTo,
+      skipBrowserRedirect: skipRedirect,
       queryParams: { access_type: 'offline', prompt: 'consent' },
     },
   });
   if (error) throw error;
-  return data; // { url } — the browser redirects here
+  return data; // { url, provider }
+}
+
+// Native only: finish the PKCE flow after the deep-link redirect carries ?code=.
+export async function exchangeCodeForSession(code: string) {
+  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  if (error) throw error;
 }
 
 // After the OAuth redirect the session carries provider tokens exactly once.

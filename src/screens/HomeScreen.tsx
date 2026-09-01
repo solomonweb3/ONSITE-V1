@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { HomeStackParams } from '../navigation/types';
@@ -23,16 +23,16 @@ export function HomeScreen({ navigation }: Props) {
     setLinking(true);
     const res = await connectEmail();
     setLinking(false);
-    if (res.error) window.alert?.(res.error);
+    if (res.error) Alert.alert('Link email', res.error);
   };
 
   const onSync = async () => {
     setSyncing(true);
     try {
       const { created } = await syncEmail();
-      if (created === 0) window.alert?.('No new brand emails found.');
+      if (created === 0) Alert.alert('Sync email', 'No new brand emails found.');
     } catch (e) {
-      window.alert?.(e instanceof Error ? e.message : 'Sync failed.');
+      Alert.alert('Sync email', e instanceof Error ? e.message : 'Sync failed.');
     } finally {
       setSyncing(false);
     }

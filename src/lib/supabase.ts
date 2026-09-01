@@ -1,4 +1,5 @@
 import 'react-native-url-polyfill/auto';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 
@@ -18,6 +19,9 @@ export const supabase = createClient(supabaseUrl ?? '', supabaseAnonKey ?? '', {
     storage: AsyncStorage,
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: false, // no URL-based auth callback in a native app
+    // Web returns the OAuth code in the URL and Supabase auto-exchanges it;
+    // native completes the exchange manually after the deep-link redirect.
+    detectSessionInUrl: Platform.OS === 'web',
+    flowType: 'pkce',
   },
 });

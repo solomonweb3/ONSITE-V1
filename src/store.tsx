@@ -1,8 +1,15 @@
 import React, { createContext, useContext, useMemo, useState, useCallback, useEffect } from 'react';
+import { Platform } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
+import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
+import { makeRedirectUri } from 'expo-auth-session';
 import { BadgeStatus } from './components/ui';
 import { supabase } from './lib/supabase';
 import * as api from './data/api';
+
+// Lets the in-app browser hand the OAuth redirect back to a waiting session.
+WebBrowser.maybeCompleteAuthSession();
 
 export type AuthResult = { error?: string; needsConfirm?: boolean };
 export type MediaFile = { uri: string; ext: string; contentType: string; label: string; remote?: boolean };
@@ -471,10 +478,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       connectEmail: async () => {
         if (!session) return { error: 'Sign in first to link your email.' };
         try {
-          const redirectTo = typeof window !== 'undefined' ? window.location.origin : undefined;
-          await api.connectGmail(redirectTo ?? '');
-          // On web this redirects the page to Google; the connection is saved
-          // when we return (handled in onAuthStateChange).
+          if (Platform.OS === 'web') {
+            // Supabase redirects the page to Google; we come back with ?code=
+            // and detectSessionInUrl exchanges it, firing onAuthStateChange.
+            await api.startGmailOAuth(window.location.origin, false);
+            return {};
+          }
+          // Native: open Google in an in-app browser and complete PKCE ourselves.
+          const redirectTo = makeRedirectUri({ scheme: 'onsite', path: 'auth-callback' });
+          const data = await api.startGmailOAuth(redirectTo, true);
+          if (!data?.url) return { error: 'Could not start Google sign-in.' };
+          const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+          if (result.type !== 'success') return {}; // user dismissed
+          const code = Linking.parse(result.url).queryParams?.code as string | undefined;
+          if (code) await api.exchangeCodeForSession(code); // fires onAuthStateChange → token saved
           return {};
         } catch (e) {
           return { error: e instanceof Error ? e.message : 'Could not start Google sign-in.' };

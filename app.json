@@ -3,6 +3,7 @@
     "name": "onsite-mobile",
     "slug": "onsite-mobile",
     "version": "1.0.0",
+    "scheme": "onsite",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -30,7 +31,8 @@
           "photosPermission": "Allow ONSITE to access your photos so you can upload content.",
           "cameraPermission": false
         }
-      ]
+      ],
+      "expo-web-browser"
     ]
   }
 }

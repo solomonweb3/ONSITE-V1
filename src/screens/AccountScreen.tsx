@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ProfileStackParams } from '../navigation/types';
@@ -32,7 +32,7 @@ export function AccountScreen({ navigation }: Props) {
     setBusy(true);
     const res = await connectEmail();
     setBusy(false);
-    if (res.error) window.alert?.(res.error);
+    if (res.error) Alert.alert('Connect email', res.error);
   };
 
   return (
