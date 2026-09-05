@@ -165,20 +165,42 @@ function randomUuid(): string {
 // activation, so no admin call is needed. Self-contained: this is the only
 // place that touches review_token, so if migration 006 hasn't been applied yet
 // only this feature errors — never the main activation load.
+export async function loadReviewToken(activationId: string): Promise<string | null> {
+  const { data, error } = await supabase.from('activations').select('review_token').eq('id', activationId).single();
+  if (error) throw error;
+  return (data as { review_token: string | null } | null)?.review_token ?? null;
+}
+
+// The existing link for an activation, or null if none has been minted.
+export async function peekReviewLink(activationId: string): Promise<string | null> {
+  const token = await loadReviewToken(activationId);
+  return token ? `${REVIEW_FN_BASE}?token=${token}` : null;
+}
+
+async function setReviewToken(activationId: string, token: string | null): Promise<void> {
+  const { error } = await supabase.from('activations').update({ review_token: token }).eq('id', activationId);
+  if (error) throw error;
+}
+
 export async function ensureReviewLink(activationId: string): Promise<{ url: string; token: string }> {
-  const { data, error: readErr } = await supabase
-    .from('activations')
-    .select('review_token')
-    .eq('id', activationId)
-    .single();
-  if (readErr) throw readErr;
-  let token = (data as { review_token: string | null } | null)?.review_token ?? null;
+  let token = await loadReviewToken(activationId);
   if (!token) {
     token = randomUuid();
-    const { error } = await supabase.from('activations').update({ review_token: token }).eq('id', activationId);
-    if (error) throw error;
+    await setReviewToken(activationId, token);
   }
   return { url: `${REVIEW_FN_BASE}?token=${token}`, token };
+}
+
+// Mint a brand-new token, invalidating any previously shared link.
+export async function regenerateReviewLink(activationId: string): Promise<{ url: string; token: string }> {
+  const token = randomUuid();
+  await setReviewToken(activationId, token);
+  return { url: `${REVIEW_FN_BASE}?token=${token}`, token };
+}
+
+// Kill the link entirely — the old URL stops working immediately.
+export async function revokeReviewLink(activationId: string): Promise<void> {
+  await setReviewToken(activationId, null);
 }
 
 /* ------------------------------ mutations --------------------------------- */

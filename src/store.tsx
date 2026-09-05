@@ -143,6 +143,9 @@ type Store = {
   completeProfile: () => void;
   createActivation: (input: api.NewActivationInput) => Promise<string>;
   getReviewLink: (activationId: string) => Promise<string>;
+  peekReviewLink: (activationId: string) => Promise<string | null>;
+  regenerateReviewLink: (activationId: string) => Promise<string>;
+  revokeReviewLink: (activationId: string) => Promise<void>;
   submitItem: (activationId: string, itemId: string, caption: string, photoLabel: string, mediaUri?: string) => void;
   uploadAndSubmit: (activationId: string, itemId: string, caption: string, file: MediaFile) => Promise<void>;
   removeContent: (activationId: string, itemId: string) => void;
@@ -408,6 +411,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (!session) throw new Error('Sign in to share a brand review link.');
         const { url } = await api.ensureReviewLink(activationId);
         return url;
+      },
+      peekReviewLink: async (activationId) => {
+        if (!session) return null;
+        return api.peekReviewLink(activationId);
+      },
+      regenerateReviewLink: async (activationId) => {
+        if (!session) throw new Error('Sign in to manage the brand review link.');
+        const { url } = await api.regenerateReviewLink(activationId);
+        return url;
+      },
+      revokeReviewLink: async (activationId) => {
+        if (!session) return;
+        await api.revokeReviewLink(activationId);
       },
       submitItem: (activationId, itemId, caption, photoLabel, mediaUri) => {
         updateItem(activationId, itemId, { state: 'submitted', caption, photoLabel, mediaUri, rejectReason: undefined });

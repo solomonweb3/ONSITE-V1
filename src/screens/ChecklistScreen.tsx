@@ -14,7 +14,7 @@ type TabKey = 'client' | 'my';
 
 export function ChecklistScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const { activation, progressOf, getReviewLink } = useStore();
+  const { activation, progressOf, getReviewLink, peekReviewLink, regenerateReviewLink, revokeReviewLink } = useStore();
   const [tab, setTab] = useState<TabKey>('client');
   const [sharing, setSharing] = useState(false);
   const a = activation(route.params.activationId);
@@ -24,20 +24,54 @@ export function ChecklistScreen({ navigation, route }: Props) {
   const approved = a.items.filter((i) => i.state === 'approved').length;
   const allDone = progressOf(a.id) === 100;
 
+  const deliverLink = async (url: string) => {
+    if (Platform.OS === 'web') {
+      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        await navigator.clipboard.writeText(url);
+        Alert.alert('Link copied', 'Send it to the brand — they can review without an account.');
+      } else {
+        window.prompt('Copy this brand review link:', url);
+      }
+    } else {
+      await Share.share({ message: `Review the deliverables for ${a.title}: ${url}`, url });
+    }
+  };
+
+  const guard = async (fn: () => Promise<void>) => {
+    try {
+      await fn();
+    } catch (e) {
+      Alert.alert('Something went wrong', e instanceof Error ? e.message : 'Please try again.');
+    }
+  };
+
   const shareReviewLink = async () => {
     setSharing(true);
     try {
-      const url = await getReviewLink(a.id);
-      if (Platform.OS === 'web') {
-        if (typeof navigator !== 'undefined' && navigator.clipboard) {
-          await navigator.clipboard.writeText(url);
-          Alert.alert('Link copied', 'Send it to the brand — they can review without an account.');
-        } else {
-          window.prompt('Copy this brand review link:', url);
-        }
-      } else {
-        await Share.share({ message: `Review the deliverables for ${a.title}: ${url}`, url });
+      const existing = await peekReviewLink(a.id);
+      // No link yet, or on web: mint (if needed) and share/copy straight away.
+      if (!existing || Platform.OS === 'web') {
+        await deliverLink(existing ?? (await getReviewLink(a.id)));
+        return;
       }
+      // A link already exists — offer to reshare, rotate, or kill it.
+      Alert.alert('Brand review link', 'This activation already has a shareable link.', [
+        { text: 'Share link', onPress: () => guard(() => deliverLink(existing)) },
+        {
+          text: 'Regenerate (invalidates old link)',
+          onPress: () => guard(async () => deliverLink(await regenerateReviewLink(a.id))),
+        },
+        {
+          text: 'Revoke link',
+          style: 'destructive',
+          onPress: () =>
+            guard(async () => {
+              await revokeReviewLink(a.id);
+              Alert.alert('Link revoked', 'The old link no longer works. Share again to create a new one.');
+            }),
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
     } catch (e) {
       Alert.alert('Could not create link', e instanceof Error ? e.message : 'Please try again.');
     } finally {
