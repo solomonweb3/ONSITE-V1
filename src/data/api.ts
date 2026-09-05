@@ -143,6 +143,44 @@ export async function createActivationRemote(uid: string, input: NewActivationIn
   return { id: act.id, title: input.title, subtitle: input.subtitle, status: input.status, items };
 }
 
+/* ---------------------------- brand review link --------------------------- */
+
+const REVIEW_FN_BASE = (process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').replace(/\/$/, '') + '/functions/v1/brand-review';
+
+// A valid v4 UUID (the review_token column is uuid). crypto.getRandomValues is
+// available in the app runtime (already used for team join codes).
+function randomUuid(): string {
+  const c = globalThis.crypto as Crypto;
+  if (typeof c.randomUUID === 'function') return c.randomUUID();
+  const b = c.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40; // version 4
+  b[8] = (b[8] & 0x3f) | 0x80; // variant
+  const h = Array.from(b, (x) => x.toString(16).padStart(2, '0'));
+  return `${h[0]}${h[1]}${h[2]}${h[3]}-${h[4]}${h[5]}-${h[6]}${h[7]}-${h[8]}${h[9]}-${h[10]}${h[11]}${h[12]}${h[13]}${h[14]}${h[15]}`;
+}
+
+// Return the public brand-review URL for an activation, minting a secret token
+// on first use. Reads the existing token first (so re-sharing keeps one stable
+// link), then mints if absent. RLS lets a creator read/update their own
+// activation, so no admin call is needed. Self-contained: this is the only
+// place that touches review_token, so if migration 006 hasn't been applied yet
+// only this feature errors — never the main activation load.
+export async function ensureReviewLink(activationId: string): Promise<{ url: string; token: string }> {
+  const { data, error: readErr } = await supabase
+    .from('activations')
+    .select('review_token')
+    .eq('id', activationId)
+    .single();
+  if (readErr) throw readErr;
+  let token = (data as { review_token: string | null } | null)?.review_token ?? null;
+  if (!token) {
+    token = randomUuid();
+    const { error } = await supabase.from('activations').update({ review_token: token }).eq('id', activationId);
+    if (error) throw error;
+  }
+  return { url: `${REVIEW_FN_BASE}?token=${token}`, token };
+}
+
 /* ------------------------------ mutations --------------------------------- */
 
 export async function submitItemRemote(itemId: string, caption: string, mediaLabel: string, mediaUrl?: string) {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { View, ScrollView, Pressable, StyleSheet, Share, Platform, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { HomeStackParams } from '../navigation/types';
@@ -14,14 +14,36 @@ type TabKey = 'client' | 'my';
 
 export function ChecklistScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const { activation, progressOf } = useStore();
+  const { activation, progressOf, getReviewLink } = useStore();
   const [tab, setTab] = useState<TabKey>('client');
+  const [sharing, setSharing] = useState(false);
   const a = activation(route.params.activationId);
   if (!a) return null;
 
   const items = a.items.filter((i) => i.owner === tab);
   const approved = a.items.filter((i) => i.state === 'approved').length;
   const allDone = progressOf(a.id) === 100;
+
+  const shareReviewLink = async () => {
+    setSharing(true);
+    try {
+      const url = await getReviewLink(a.id);
+      if (Platform.OS === 'web') {
+        if (typeof navigator !== 'undefined' && navigator.clipboard) {
+          await navigator.clipboard.writeText(url);
+          Alert.alert('Link copied', 'Send it to the brand — they can review without an account.');
+        } else {
+          window.prompt('Copy this brand review link:', url);
+        }
+      } else {
+        await Share.share({ message: `Review the deliverables for ${a.title}: ${url}`, url });
+      }
+    } catch (e) {
+      Alert.alert('Could not create link', e instanceof Error ? e.message : 'Please try again.');
+    } finally {
+      setSharing(false);
+    }
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.white, paddingTop: insets.top }}>
@@ -70,19 +92,26 @@ export function ChecklistScreen({ navigation, route }: Props) {
         ) : null}
       </ScrollView>
 
-      {allDone ? (
-        <View style={{ paddingHorizontal: space.screenX, paddingBottom: insets.bottom + 16 }}>
-          <Button label="View delivery summary" onPress={() => navigation.navigate('AllComplete', { activationId: a.id })} />
-        </View>
-      ) : (
-        <View style={{ paddingHorizontal: space.screenX, paddingBottom: insets.bottom + 16 }}>
+      <View style={{ paddingHorizontal: space.screenX, paddingBottom: insets.bottom + 16, gap: 10 }}>
+        <Button
+          label={sharing ? 'Creating link…' : 'Share brand review link'}
+          onPress={shareReviewLink}
+          loading={sharing}
+        />
+        {allDone ? (
+          <Button
+            label="View delivery summary"
+            variant="secondary"
+            onPress={() => navigation.navigate('AllComplete', { activationId: a.id })}
+          />
+        ) : (
           <Button
             label="Preview as brand"
             variant="secondary"
             onPress={() => navigation.navigate('BrandPreview', { activationId: a.id })}
           />
-        </View>
-      )}
+        )}
+      </View>
     </View>
   );
 }

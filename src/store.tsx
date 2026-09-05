@@ -142,6 +142,7 @@ type Store = {
   // actions
   completeProfile: () => void;
   createActivation: (input: api.NewActivationInput) => Promise<string>;
+  getReviewLink: (activationId: string) => Promise<string>;
   submitItem: (activationId: string, itemId: string, caption: string, photoLabel: string, mediaUri?: string) => void;
   uploadAndSubmit: (activationId: string, itemId: string, caption: string, file: MediaFile) => Promise<void>;
   removeContent: (activationId: string, itemId: string) => void;
@@ -402,6 +403,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           ...prev,
         ]);
         return id;
+      },
+      getReviewLink: async (activationId) => {
+        if (!session) throw new Error('Sign in to share a brand review link.');
+        const { url } = await api.ensureReviewLink(activationId);
+        return url;
       },
       submitItem: (activationId, itemId, caption, photoLabel, mediaUri) => {
         updateItem(activationId, itemId, { state: 'submitted', caption, photoLabel, mediaUri, rejectReason: undefined });

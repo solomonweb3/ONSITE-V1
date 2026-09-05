@@ -5,3 +5,8 @@ verify_jwt = true
 
 [functions.gmail-sync]
 verify_jwt = true
+
+# Brands open this from a magic link while logged out, so no JWT is required.
+# Access is gated by the secret review_token, not by an auth session.
+[functions.brand-review]
+verify_jwt = false
