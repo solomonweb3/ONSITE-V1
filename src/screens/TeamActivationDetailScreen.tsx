@@ -27,18 +27,32 @@ const stateLabel: Record<ChecklistItem['state'], string> = {
 function DeliverableCard({ item }: { item: ChecklistItem }) {
   const hasUpload = item.state === 'submitted' || item.state === 'approved';
   const approved = item.state === 'approved';
+  const rejected = item.state === 'rejected';
   return (
     <View style={styles.card}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <Text style={styles.cardTitle}>{item.title}</Text>
-        <View style={[styles.stateChip, approved && { backgroundColor: '#E6F2E9' }, item.state === 'submitted' && { backgroundColor: colors.grey100 }]}>
+        <View
+          style={[
+            styles.stateChip,
+            approved && { backgroundColor: '#E6F2E9' },
+            item.state === 'submitted' && { backgroundColor: colors.grey100 },
+            rejected && { backgroundColor: '#FBE9E7' },
+          ]}
+        >
           {approved ? <Check size={12} color={colors.success} /> : null}
-          <Text style={[styles.stateText, approved && { color: colors.success }]}>{stateLabel[item.state]}</Text>
+          <Text style={[styles.stateText, approved && { color: colors.success }, rejected && { color: colors.red }]}>
+            {stateLabel[item.state]}
+          </Text>
         </View>
       </View>
       <Text style={styles.cardMeta}>
         {item.owner === 'client' ? 'Client item' : 'Creator item'} · {item.due === 'Delivered' ? 'Delivered' : `Due ${item.due}`}
       </Text>
+
+      {rejected && item.rejectReason ? (
+        <Text style={styles.brandNote}>Brand asked: {item.rejectReason}</Text>
+      ) : null}
 
       {hasUpload ? (
         <View style={{ gap: 8 }}>
@@ -91,6 +105,17 @@ export function TeamActivationDetailScreen({ navigation, route }: Props) {
 
   const progress = activationProgress(a.items);
   const approved = a.items.filter((i) => i.state === 'approved').length;
+  const awaiting = a.items.filter((i) => i.state === 'submitted').length;
+  const changes = a.items.filter((i) => i.state === 'rejected').length;
+  const reviewNote =
+    changes > 0
+      ? `${changes} change${changes === 1 ? '' : 's'} requested by brand`
+      : awaiting > 0
+      ? `${awaiting} awaiting brand review`
+      : a.items.length > 0 && approved === a.items.length
+      ? 'All items approved by brand'
+      : null;
+  const reviewNoteColor = changes > 0 ? colors.red : approved === a.items.length ? colors.success : colors.grey600;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.white, paddingTop: insets.top }}>
@@ -118,6 +143,7 @@ export function TeamActivationDetailScreen({ navigation, route }: Props) {
               <Text style={styles.progressMeta}>{approved}/{a.items.length} approved · {progress}%</Text>
             </View>
             <ProgressBar value={progress} />
+            {reviewNote ? <Text style={[styles.reviewNote, { color: reviewNoteColor }]}>{reviewNote}</Text> : null}
           </View>
         </View>
 
@@ -147,6 +173,8 @@ const styles = StyleSheet.create({
   card: { borderWidth: 1, borderColor: colors.grey100, borderRadius: 12, padding: 16, gap: 8 },
   cardTitle: { fontFamily: font.semibold, fontSize: 15, color: colors.black, flexShrink: 1, paddingRight: 8 },
   cardMeta: { fontFamily: font.mono, fontSize: 11, color: colors.grey600 },
+  brandNote: { fontFamily: font.regular, fontSize: 12, color: colors.red },
+  reviewNote: { fontFamily: font.monoMedium, fontSize: 11, marginTop: 10 },
   stateChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.grey100, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20 },
   stateText: { fontFamily: font.monoMedium, fontSize: 10, color: colors.grey600, letterSpacing: 0.2 },
   media: { width: '100%', height: 200, borderRadius: 10, backgroundColor: colors.black, overflow: 'hidden' },
