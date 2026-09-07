@@ -143,6 +143,46 @@ export async function createActivationRemote(uid: string, input: NewActivationIn
   return { id: act.id, title: input.title, subtitle: input.subtitle, status: input.status, items };
 }
 
+// Create a DRAFT activation from a pasted brand email. Same shape as a manual
+// activation but marked source='email' + is_draft=true, so it lands in the
+// existing "Suggested from email" section to confirm or dismiss.
+export async function createDraftActivationRemote(
+  uid: string,
+  input: NewActivationInput,
+  teamId?: string | null,
+): Promise<Activation> {
+  const { data: act, error } = await supabase
+    .from('activations')
+    .insert({
+      creator_id: uid,
+      team_id: teamId ?? null,
+      title: input.title,
+      subtitle: input.subtitle,
+      status: statusToDb[input.status] ?? 'live',
+      source: 'email',
+      is_draft: true,
+    })
+    .select('id')
+    .single();
+  if (error || !act) throw error;
+
+  let items: ChecklistItem[] = [];
+  if (input.items.length) {
+    const rows = input.items.map((it, idx) => ({
+      activation_id: act.id,
+      title: it.title,
+      owner: it.owner,
+      due_label: it.due,
+      state: 'todo' as const,
+      position: idx,
+    }));
+    const { data: inserted, error: e2 } = await supabase.from('checklist_items').insert(rows).select('*');
+    if (e2) throw e2;
+    items = (inserted as ItemRow[]).slice().sort((a, b) => a.position - b.position).map(mapItem);
+  }
+  return { id: act.id, title: input.title, subtitle: input.subtitle, status: input.status, source: 'email', isDraft: true, items };
+}
+
 /* ---------------------------- brand review link --------------------------- */
 
 const REVIEW_FN_BASE = (process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').replace(/\/$/, '') + '/functions/v1/brand-review';

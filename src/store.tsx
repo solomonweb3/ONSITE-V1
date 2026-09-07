@@ -6,6 +6,7 @@ import * as Linking from 'expo-linking';
 import { makeRedirectUri } from 'expo-auth-session';
 import { BadgeStatus } from './components/ui';
 import { supabase } from './lib/supabase';
+import { parseBrandEmail } from './lib/parseBrandEmail';
 import * as api from './data/api';
 
 // Lets the in-app browser hand the OAuth redirect back to a waiting session.
@@ -142,6 +143,7 @@ type Store = {
   // actions
   completeProfile: () => void;
   createActivation: (input: api.NewActivationInput) => Promise<string>;
+  addEmailDraft: (text: string) => Promise<void>;
   getReviewLink: (activationId: string) => Promise<string>;
   peekReviewLink: (activationId: string) => Promise<string | null>;
   regenerateReviewLink: (activationId: string) => Promise<string>;
@@ -406,6 +408,29 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           ...prev,
         ]);
         return id;
+      },
+      addEmailDraft: async (text) => {
+        const parsed = parseBrandEmail(text);
+        const input: api.NewActivationInput = { title: parsed.title, subtitle: parsed.brand, status: 'Live', items: parsed.items };
+        if (session) {
+          const created = await api.createDraftActivationRemote(session.user.id, input, myTeam?.id);
+          setActivations((prev) => [created, ...prev]);
+          return;
+        }
+        // Demo / offline: keep the draft local.
+        const id = 'local-' + Date.now();
+        setActivations((prev) => [
+          {
+            id,
+            title: input.title,
+            subtitle: input.subtitle,
+            status: input.status,
+            source: 'email',
+            isDraft: true,
+            items: input.items.map((it, i) => ({ id: `${id}-i${i}`, title: it.title, owner: it.owner, due: it.due, state: 'todo' as const })),
+          },
+          ...prev,
+        ]);
       },
       getReviewLink: async (activationId) => {
         if (!session) throw new Error('Sign in to share a brand review link.');
