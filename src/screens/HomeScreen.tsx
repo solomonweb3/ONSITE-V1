@@ -13,18 +13,10 @@ type Props = NativeStackScreenProps<HomeStackParams, 'Home'>;
 
 export function HomeScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { activations, drafts, progressOf, liveCount, completedCount, emailConnection, connectEmail, syncEmail, confirmDraft, dismissDraft } = useStore();
+  const { activations, drafts, progressOf, liveCount, completedCount, emailConnection, syncEmail, confirmDraft, dismissDraft } = useStore();
   const confirmed = activations.filter((a) => !a.isDraft);
   const empty = confirmed.length === 0 && drafts.length === 0;
-  const [linking, setLinking] = React.useState(false);
   const [syncing, setSyncing] = React.useState(false);
-
-  const onLinkEmail = async () => {
-    setLinking(true);
-    const res = await connectEmail();
-    setLinking(false);
-    if (res.error) Alert.alert('Link email', res.error);
-  };
 
   const onSync = async () => {
     setSyncing(true);
@@ -58,27 +50,25 @@ export function HomeScreen({ navigation }: Props) {
           </Text>
           <View style={{ width: '100%', gap: 10, marginTop: 24 }}>
             <Button label="Create Activation" onPress={() => navigation.navigate('NewActivation')} />
-            <Button
-              label={emailConnection ? 'Email Linked ✓' : linking ? 'Connecting…' : 'Link Email'}
-              variant="secondary"
-              onPress={onLinkEmail}
-              disabled={!!emailConnection || linking}
-            />
+            <Button label="Paste a Brand Email" variant="secondary" onPress={() => navigation.navigate('PasteEmail')} />
           </View>
-          <Text style={styles.emptyHint}>
-            {emailConnection ? `Linked to ${emailConnection.email ?? 'your inbox'}.` : 'Connect Gmail to auto-suggest activations from brand emails.'}
-          </Text>
+          <Text style={styles.emptyHint}>Paste a collab email from any inbox and we'll draft the activation for you.</Text>
         </View>
       ) : (
         <>
           <View style={styles.metaRow}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <Meta>{`${liveCount} LIVE  ·  ${completedCount} COMPLETED THIS MONTH`}</Meta>
-              {emailConnection ? (
-                <Pressable onPress={onSync} disabled={syncing} hitSlop={8}>
-                  <Text style={styles.syncLink}>{syncing ? 'Syncing…' : '↻ Sync email'}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+                {emailConnection ? (
+                  <Pressable onPress={onSync} disabled={syncing} hitSlop={8}>
+                    <Text style={styles.syncLink}>{syncing ? 'Syncing…' : '↻ Sync email'}</Text>
+                  </Pressable>
+                ) : null}
+                <Pressable onPress={() => navigation.navigate('PasteEmail')} hitSlop={8}>
+                  <Text style={styles.syncLink}>+ Paste email</Text>
                 </Pressable>
-              ) : null}
+              </View>
             </View>
           </View>
           <ScrollView

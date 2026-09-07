@@ -7,6 +7,7 @@ export type AuthStackParams = {
 export type HomeStackParams = {
   Home: undefined;
   NewActivation: undefined;
+  PasteEmail: undefined;
   Checklist: { activationId: string };
   ItemDetail: { activationId: string; itemId: string };
   AllComplete: { activationId: string };
