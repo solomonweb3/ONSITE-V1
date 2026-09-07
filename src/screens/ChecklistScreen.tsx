@@ -22,7 +22,20 @@ export function ChecklistScreen({ navigation, route }: Props) {
 
   const items = a.items.filter((i) => i.owner === tab);
   const approved = a.items.filter((i) => i.state === 'approved').length;
+  const awaiting = a.items.filter((i) => i.state === 'submitted').length;
+  const changes = a.items.filter((i) => i.state === 'rejected').length;
   const allDone = progressOf(a.id) === 100;
+
+  // Reflect what the brand has actually done, most-urgent first.
+  const reviewLabel =
+    changes > 0
+      ? `${changes} change${changes === 1 ? '' : 's'} requested`
+      : allDone
+      ? 'All items approved'
+      : awaiting > 0
+      ? `${awaiting} awaiting brand review`
+      : 'Ready to share for review';
+  const reviewColor = changes > 0 ? colors.pendingAmber : allDone ? colors.success : colors.black;
 
   const deliverLink = async (url: string) => {
     if (Platform.OS === 'web') {
@@ -97,8 +110,8 @@ export function ChecklistScreen({ navigation, route }: Props) {
 
       <View style={{ paddingHorizontal: space.screenX }}>
         <View style={styles.reviewPill}>
-          <Body style={styles.reviewLabel}>{allDone ? 'All items delivered' : 'Pending client review'}</Body>
-          <Meta style={{ fontSize: 12 }}>{`${approved}/${a.items.length} items`}</Meta>
+          <Body style={[styles.reviewLabel, { color: reviewColor }]}>{reviewLabel}</Body>
+          <Meta style={{ fontSize: 12 }}>{`${approved}/${a.items.length} approved`}</Meta>
         </View>
       </View>
 
